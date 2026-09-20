@@ -39,7 +39,10 @@ namespace EmployeeManagement.API.Services
             var user = new User
             {
                 Username = request.Username,
-                Role = request.Role
+
+                // Every user registering through the public API
+                // gets the User role by default.
+                Role = "User"
             };
 
             // Hash the password before storing it in the database.
