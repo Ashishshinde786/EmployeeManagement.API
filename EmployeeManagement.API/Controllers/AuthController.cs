@@ -15,7 +15,14 @@ namespace EmployeeManagement.API.Controllers
             _authService = authService;
         }
 
+        // ============================================================
+        // REGISTER
+        // ============================================================
+
         [HttpPost("register")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> Register(
             RegisterRequest request)
         {
@@ -28,7 +35,15 @@ namespace EmployeeManagement.API.Controllers
             });
         }
 
+
+        // ============================================================
+        // LOGIN
+        // ============================================================
+
         [HttpPost("login")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Login(
             LoginRequest request)
         {

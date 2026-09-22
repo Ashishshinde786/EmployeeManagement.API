@@ -1,5 +1,6 @@
 ﻿using EmployeeManagement.API.Data;
 using EmployeeManagement.API.DTOs;
+using EmployeeManagement.API.Exceptions;
 using EmployeeManagement.API.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,10 @@ namespace EmployeeManagement.API.Services
             _jwtService = jwtService;
         }
 
+        // ============================================================
+        // REGISTER USER
+        // ============================================================
+
         public async Task<string> RegisterAsync(
             RegisterRequest request)
         {
@@ -32,7 +37,9 @@ namespace EmployeeManagement.API.Services
 
             if (existingUser != null)
             {
-                throw new Exception("Username already exists.");
+                // Username already exists, so this is a business conflict.
+                throw new ConflictException(
+                    "Username already exists.");
             }
 
             // Create a new user object.
@@ -58,6 +65,11 @@ namespace EmployeeManagement.API.Services
 
             return "User registered successfully.";
         }
+
+
+        // ============================================================
+        // LOGIN USER
+        // ============================================================
 
         public async Task<string?> LoginAsync(
             LoginRequest request)
