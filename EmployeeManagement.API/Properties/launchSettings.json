@@ -29,3 +29,499 @@
   },
   "$schema": "https://json.schemastore.org/launchsettings.json"
 }
+
+/*
+============================================================
+LAUNCHSETTINGS.JSON - COMPLETE EXPLANATION
+============================================================
+
+launchSettings.json contains local development and debugging
+settings for the ASP.NET Core application.
+
+It is mainly used by Visual Studio and the .NET CLI when
+running the application locally.
+
+It defines different profiles for running the application.
+
+In this project we have three profiles:
+
+    1. http
+    2. https
+    3. Container (Dockerfile)
+
+
+IMPORTANT:
+
+launchSettings.json is mainly a DEVELOPMENT configuration file.
+
+It is normally used for local development, debugging, and
+launching the application from Visual Studio.
+
+It is not intended to be the main production configuration
+file.
+
+
+============================================================
+1. PROFILES
+============================================================
+
+"profiles": {
+
+}
+
+The profiles section contains different ways in which we can
+run our ASP.NET Core application.
+
+Each profile can have its own:
+
+    - Command
+    - Environment
+    - URL
+    - Port
+    - Docker settings
+
+
+============================================================
+2. HTTP PROFILE
+============================================================
+
+"http": {
+    "commandName": "Project",
+    ...
+}
+
+This profile runs the ASP.NET Core application directly as a
+.NET project using HTTP.
+
+
+------------------------------------------------------------
+commandName
+------------------------------------------------------------
+
+"commandName": "Project"
+
+This tells Visual Studio / .NET that the application should
+be launched as a normal ASP.NET Core project.
+
+It is not running inside Docker for this profile.
+
+
+------------------------------------------------------------
+ASPNETCORE_ENVIRONMENT
+------------------------------------------------------------
+
+"ASPNETCORE_ENVIRONMENT": "Development"
+
+This sets the ASP.NET Core environment to:
+
+    Development
+
+ASP.NET Core uses environments such as:
+
+    Development
+    Staging
+    Production
+
+When the application is running in Development mode, code
+such as:
+
+    if (app.Environment.IsDevelopment())
+    {
+        ...
+    }
+
+can execute.
+
+In our Program.cs, Swagger is enabled in Development mode.
+
+Therefore, when this profile is used, development-specific
+features can be enabled.
+
+
+------------------------------------------------------------
+dotnetRunMessages
+------------------------------------------------------------
+
+"dotnetRunMessages": true
+
+This enables additional messages when the application starts.
+
+For example, the console can display information about the
+URLs where the application is listening.
+
+
+------------------------------------------------------------
+applicationUrl
+------------------------------------------------------------
+
+"applicationUrl": "http://localhost:5079"
+
+This specifies the URL where the application listens for
+HTTP requests.
+
+Our HTTP API is therefore available at:
+
+    http://localhost:5079
+
+For example:
+
+    http://localhost:5079/api/employees
+
+or:
+
+    http://localhost:5079/api/auth/login
+
+
+============================================================
+3. HTTPS PROFILE
+============================================================
+
+"https": {
+    "commandName": "Project",
+    ...
+}
+
+This profile runs the application as a normal .NET project
+but provides an HTTPS endpoint as well.
+
+
+------------------------------------------------------------
+commandName
+------------------------------------------------------------
+
+"commandName": "Project"
+
+The application runs directly as an ASP.NET Core project.
+
+Docker is not being used for this profile.
+
+
+------------------------------------------------------------
+ASPNETCORE_ENVIRONMENT
+------------------------------------------------------------
+
+"ASPNETCORE_ENVIRONMENT": "Development"
+
+The application runs in the Development environment.
+
+Therefore development-specific configuration, such as
+Swagger in Program.cs, can be enabled.
+
+
+------------------------------------------------------------
+dotnetRunMessages
+------------------------------------------------------------
+
+"dotnetRunMessages": true
+
+This displays additional information in the console when
+the application starts.
+
+
+------------------------------------------------------------
+applicationUrl
+------------------------------------------------------------
+
+"applicationUrl":
+    "https://localhost:7226;http://localhost:5079"
+
+This application has two URLs in this profile:
+
+HTTPS:
+
+    https://localhost:7226
+
+HTTP:
+
+    http://localhost:5079
+
+The semicolon separates multiple URLs.
+
+Therefore, when you run this profile, ASP.NET Core can listen
+on both endpoints.
+
+HTTPS is generally preferred for application communication
+because it encrypts data sent between the client and server.
+
+This is especially important for authentication because
+login requests contain credentials.
+
+
+============================================================
+4. CONTAINER / DOCKER PROFILE
+============================================================
+
+"Container (Dockerfile)": {
+    "commandName": "Docker",
+    ...
+}
+
+This profile is used when running the application inside a
+Docker container.
+
+Instead of running the application directly on the host
+machine, the application runs inside a Docker container.
+
+
+------------------------------------------------------------
+commandName
+------------------------------------------------------------
+
+"commandName": "Docker"
+
+This tells Visual Studio to use Docker for running the
+application.
+
+The Docker configuration is based on the project's
+Dockerfile.
+
+
+============================================================
+5. LAUNCH URL
+============================================================
+
+"launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}"
+
+This specifies the URL that Visual Studio should use when
+launching the application.
+
+The values inside:
+
+    {Scheme}
+    {ServiceHost}
+    {ServicePort}
+
+are placeholders.
+
+Visual Studio/container tooling resolves these values based
+on the Docker configuration and available ports.
+
+This allows the same launch configuration to work without
+hard-coding one specific container URL.
+
+
+============================================================
+6. HTTPS PORT
+============================================================
+
+"ASPNETCORE_HTTPS_PORTS": "8081"
+
+This specifies the HTTPS port used by the ASP.NET Core
+application inside the container configuration.
+
+The HTTPS port is:
+
+    8081
+
+
+============================================================
+7. HTTP PORT
+============================================================
+
+"ASPNETCORE_HTTP_PORTS": "8080"
+
+This specifies the HTTP port used by the ASP.NET Core
+application inside the container configuration.
+
+The HTTP port is:
+
+    8080
+
+
+============================================================
+8. PUBLISH ALL PORTS
+============================================================
+
+"publishAllPorts": true
+
+This tells the container tooling to publish the container's
+exposed ports.
+
+This helps make the application's container ports accessible
+from the host machine according to the Docker configuration.
+
+
+============================================================
+9. USE SSL
+============================================================
+
+"useSSL": true
+
+This indicates that SSL/HTTPS should be used for the Docker
+container configuration.
+
+This works together with the HTTPS port:
+
+    8081
+
+
+============================================================
+10. $schema
+============================================================
+
+"$schema":
+    "https://json.schemastore.org/launchsettings.json"
+
+The $schema property tells development tools which JSON schema
+should be used to understand and validate this file.
+
+It helps Visual Studio provide:
+
+    - IntelliSense
+    - Validation
+    - Auto-completion
+    - Information about supported properties
+
+It does not represent an application runtime setting.
+
+It is mainly useful for development tools.
+
+
+============================================================
+YOUR LOCAL APPLICATION URLS
+============================================================
+
+When running the normal HTTP profile:
+
+    http://localhost:5079
+
+
+When running the HTTPS profile:
+
+    https://localhost:7226
+
+and:
+
+    http://localhost:5079
+
+
+When running through Docker:
+
+    HTTP  → 8080
+    HTTPS → 8081
+
+
+============================================================
+HOW THIS CONNECTS WITH PROGRAM.CS
+============================================================
+
+The launchSettings.json file controls how the application is
+started locally.
+
+For example:
+
+launchSettings.json
+        ↓
+Development environment
+        ↓
+Program.cs
+        ↓
+IsDevelopment()
+        ↓
+Swagger enabled
+
+
+The application URLs are also used when ASP.NET Core starts:
+
+launchSettings.json
+        ↓
+Application URL
+        ↓
+Kestrel
+        ↓
+ASP.NET Core Web API
+
+
+============================================================
+HTTP VS HTTPS
+============================================================
+
+HTTP:
+
+    http://localhost:5079
+
+Data is transferred without transport encryption.
+
+HTTPS:
+
+    https://localhost:7226
+
+Data is encrypted using TLS/SSL.
+
+For local development, both may be available.
+
+For APIs involving authentication, HTTPS is important because
+credentials and JWT tokens should be protected while being
+transmitted.
+
+
+============================================================
+LAUNCHSETTINGS VS APPSETTINGS
+============================================================
+
+These two files have different responsibilities.
+
+
+appsettings.json
+----------------
+
+Contains application configuration such as:
+
+    - Database connection string
+    - JWT settings
+    - Logging settings
+    - Application configuration
+
+
+launchSettings.json
+-------------------
+
+Contains local launch/debugging configuration such as:
+
+    - Application URLs
+    - HTTP/HTTPS ports
+    - Development environment
+    - Docker launch settings
+    - Visual Studio launch profiles
+
+
+Simple difference:
+
+    appsettings.json
+        ↓
+    Application configuration
+
+
+    launchSettings.json
+        ↓
+    Local application startup / debugging configuration
+
+
+============================================================
+INTERVIEW-READY EXPLANATION
+============================================================
+
+"launchSettings.json is mainly used for local development and
+debugging in ASP.NET Core. It defines different launch
+profiles such as HTTP, HTTPS, and Docker.
+
+In my project, the HTTP profile runs the application on
+localhost:5079, while the HTTPS profile runs it on
+localhost:7226 and also exposes the HTTP endpoint on 5079.
+
+The environment variable ASPNETCORE_ENVIRONMENT is set to
+Development, which allows development-specific behavior such
+as Swagger configuration in Program.cs.
+
+The Docker profile runs the application inside a Docker
+container and uses ports 8080 for HTTP and 8081 for HTTPS.
+
+The $schema property helps Visual Studio validate the JSON and
+provide IntelliSense.
+
+Unlike appsettings.json, launchSettings.json is primarily
+used for local development and application startup rather
+than storing general application configuration."
+
+============================================================
+*/
