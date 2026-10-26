@@ -1,114 +1,41 @@
-﻿
-// ============================================================
-// NAMESPACE / IMPORT
-// ============================================================
-
-// System.ComponentModel.DataAnnotations provides validation
-// attributes such as:
-//
-// [Required]
-// [StringLength]
-// [EmailAddress]
-// [Range]
-//
-// We use [Required] in this DTO to make sure the client
-// provides both Username and Password.
+﻿// Imports validation attributes such as [Required].
+// These attributes help ASP.NET Core validate incoming request data.
 using System.ComponentModel.DataAnnotations;
-
-
-// ============================================================
-// NAMESPACE
-// ============================================================
 
 namespace EmployeeManagement.API.DTOs
 {
-    // ========================================================
-    // LOGIN REQUEST DTO
-    // ========================================================
-
-    // LoginRequest is a DTO used to receive login credentials
-    // from the client.
+    // LoginRequest defines the structure of the data required
+    // to log in to the application.
     //
-    // DTO = Data Transfer Object.
+    // The client sends this data in the HTTP request body.
+    // ASP.NET Core converts the JSON into a LoginRequest object.
     //
-    // This is an INPUT DTO because the direction is:
-    //
-    // Client
-    //    ↓
-    // LoginRequest
-    //    ↓
-    // AuthController
-    //    ↓
-    // AuthService
-    //
-    // Example HTTP request:
-    //
-    // POST /api/auth/login
-    //
-    // {
-    //     "username": "ashish",
-    //     "password": "Password123"
-    // }
-    //
+    // This class only represents and validates the request data.
+    // It does not verify credentials or generate a JWT.
     public class LoginRequest
     {
-        // ====================================================
-        // USERNAME
-        // ====================================================
-
-        // [Required] means the client must provide
-        // a Username value.
+        // The username entered by the user.
         //
-        // If Username is missing or invalid according to
-        // the Required validator, model validation fails.
+        // [Required] tells model validation that this field is mandatory.
         //
-        // Because AuthController has [ApiController],
-        // ASP.NET Core can automatically return:
+        // The value normally comes from the login form in the frontend,
+        // or from Swagger or Postman during testing.
         //
-        // 400 Bad Request
-        //
-        // when model validation fails.
+        // AuthService uses this value to find the matching user
+        // in the database.
         [Required]
-
-
-        // Username supplied by the user during login.
-        //
-        // Example:
-        //
-        // "ashish"
-        //
-        // = string.Empty means the property starts with an
-        // empty string instead of null.
         public string Username { get; set; } = string.Empty;
 
-
-        // ====================================================
-        // PASSWORD
-        // ====================================================
-
-        // Password is also required.
+        // The password entered by the user.
         //
-        // The client must provide a password.
+        // [Required] tells model validation that this field is mandatory.
         //
-        // If the password is missing, validation fails.
+        // AuthService verifies this supplied password against the
+        // stored password hash using IPasswordHasher<User>.
+        //
+        // The plain-text password should only be handled as needed
+        // for verification and must never be stored as plain text.
         [Required]
-
-
-        // Password supplied by the user.
-        //
-        // IMPORTANT:
-        //
-        // The password should be sent over HTTPS so that
-        // credentials are encrypted while traveling between
-        // client and server.
-        //
-        // The application should NOT store this plain-text
-        // password in the database.
-        //
-        // During authentication, AuthService should compare
-        // the supplied password against the stored password
-        // hash using IPasswordHasher<User>.
         public string Password { get; set; } = string.Empty;
     }
 }
-

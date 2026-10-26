@@ -1,6 +1,38 @@
+# Define a variable that stores the base URL of your API.
+# This is the HTTP address where your application is running.
 @EmployeeManagement.API_HostAddress = http://localhost:5079
 
+# --------------------------------------------------
+# GET WEATHER FORECAST
+# --------------------------------------------------
+
+# Send an HTTP GET request to the WeatherForecast endpoint.
+# The variable above is substituted with http://localhost:5079.
 GET {{EmployeeManagement.API_HostAddress}}/weatherforecast/
+
+# Tell the API that we expect the response in JSON format.
 Accept: application/json
+
+# --------------------------------------------------
+# Separator
+# Use ### to separate multiple HTTP requests in this file.
+# --------------------------------------------------
+
+###
+
+# --------------------------------------------------
+# EXAMPLE: GET ALL EMPLOYEES
+# --------------------------------------------------
+
+# Retrieve employees from the Employee Management API.
+# This endpoint supports pagination.
+GET {{EmployeeManagement.API_HostAddress}}/api/employees?page=1&pageSize=10
+
+# Expect a JSON response.
+Accept: application/json
+
+# Note: EmployeeController requires authentication.
+# Add a valid JWT token to call this protected endpoint.
+# Authorization: Bearer YOUR_JWT_TOKEN
 
 ###

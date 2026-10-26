@@ -1,378 +1,179 @@
-﻿
-// ============================================================
-// NAMESPACES / IMPORTS
-// ============================================================
-
-// Contains our DTO classes.
-//
-// DTO = Data Transfer Object.
-//
-// RegisterRequest and LoginRequest are used to receive
-// only the data required by the API.
-//
-// We should avoid directly exposing database entities
-// through API requests.
+﻿// Imports request and response DTOs such as RegisterRequest,
+// LoginRequest, and ChangePasswordRequest.
 using EmployeeManagement.API.DTOs;
 
-
-// Contains authentication service interfaces
-// and implementations.
-//
-// The controller depends on IAuthService rather than
-// directly implementing authentication/business logic.
+// Imports service interfaces, including IAuthService.
+// The controller uses this service to perform authentication operations.
 using EmployeeManagement.API.Services;
 
+// Provides the [Authorize] attribute to protect endpoints
+// that require the user to be authenticated.
+using Microsoft.AspNetCore.Authorization;
 
-// Provides ASP.NET Core MVC functionality.
-//
-// ControllerBase, IActionResult, ApiController,
-// HttpPost, Route, etc. come from ASP.NET Core MVC.
+// Provides ControllerBase, routing attributes, and HTTP response helpers
+// such as Ok(), BadRequest(), and Unauthorized().
 using Microsoft.AspNetCore.Mvc;
 
+// Allows us to apply rate-limiting policies to this controller.
+using Microsoft.AspNetCore.RateLimiting;
 
-// ============================================================
-// NAMESPACE
-// ============================================================
+// Provides methods for reading claims from the authenticated user.
+using System.Security.Claims;
 
 namespace EmployeeManagement.API.Controllers
 {
-    // ========================================================
-    // AUTH CONTROLLER
-    // ========================================================
-
-    // [ApiController] tells ASP.NET Core that this class
-    // is an API controller.
-    //
-    // It provides several useful API features automatically:
-    //
-    // 1. Automatic model validation
-    // 2. Automatic HTTP 400 response for invalid models
-    // 3. Better parameter binding
-    // 4. API-specific behavior
-    //
-    // Example:
-    //
-    // If RegisterRequest has:
-    //
-    // [Required]
-    // public string Email { get; set; }
-    //
-    // and the client doesn't provide Email,
-    // ASP.NET Core can automatically return 400 Bad Request.
-    //
+    // Tells ASP.NET Core that this class handles API requests
+    // and enables automatic request validation for DTO validation attributes.
     [ApiController]
 
-
-    // [Route("api/[controller]")] defines the base route
-    // for this controller.
-    //
-    // [controller] is replaced by the controller class name
-    // without the "Controller" suffix.
-    //
-    // AuthController
-    //      ↓
-    // Auth
-    //
-    // Therefore:
-    //
-    // Base route:
-    //
-    // /api/auth
-    //
-    // Then the action route is added after that.
-    //
-    // Example:
-    //
-    // [HttpPost("register")]
-    //
-    // becomes:
-    //
-    // POST /api/auth/register
-    //
+    // Builds the URL using the controller name.
+    // AuthController becomes "auth", so the base route is /api/auth.
     [Route("api/[controller]")]
+
+    // Indicates that this controller returns JSON responses.
+    [Produces("application/json")]
+
+    // Applies the "auth" rate-limiting policy configured in Program.cs.
+    // This helps restrict repeated requests to authentication endpoints.
+    [EnableRateLimiting("auth")]
     public class AuthController : ControllerBase
     {
-        // ====================================================
-        // AUTH SERVICE DEPENDENCY
-        // ====================================================
-
-        // The controller does not directly perform:
-        //
-        // - Database operations
-        // - Password hashing
-        // - Password verification
-        // - JWT generation
-        //
-        // Instead, it delegates authentication business logic
-        // to IAuthService.
-        //
-        // This follows Separation of Concerns.
+        // Holds a reference to the authentication service.
+        // The service contains the actual registration, login,
+        // and password-changing logic.
         private readonly IAuthService _authService;
 
-
-        // ====================================================
-        // CONSTRUCTOR
-        // ====================================================
-
-        // ASP.NET Core Dependency Injection automatically
-        // provides an implementation of IAuthService.
-        //
-        // Program.cs contains:
-        //
-        // builder.Services.AddScoped<IAuthService, AuthService>();
-        //
-        // Therefore ASP.NET Core does:
-        //
-        // IAuthService
-        //      ↓
-        // AuthService
-        //      ↓
-        // AuthController
-        //
+        // Constructor: ASP.NET Core's dependency injection system
+        // supplies an implementation of IAuthService when the controller
+        // is created for an incoming request.
         public AuthController(IAuthService authService)
         {
-            // Store the injected service in a private field
-            // so the controller actions can use it.
+            // Store the injected service for use in the controller methods.
             _authService = authService;
         }
 
-
-        // ====================================================
-        // REGISTER
-        // ====================================================
-
-        // [HttpPost("register")] means this action handles
-        // HTTP POST requests.
-        //
-        // Because the controller route is:
-        //
-        // /api/auth
-        //
-        // and the action route is:
-        //
-        // /register
-        //
-        // the complete endpoint is:
-        //
-        // POST /api/auth/register
-        //
-        // POST is generally used when creating a new resource.
+        // Endpoint: POST /api/auth/register
+        // Used to register a new user account.
         [HttpPost("register")]
 
-
-        // Swagger/OpenAPI documentation:
-        //
-        // If registration succeeds, the API can return:
-        //
-        // 200 OK
-        //
+        // Documents the possible HTTP responses for API consumers
+        // and Swagger. These attributes do not themselves generate
+        // the corresponding responses.
         [ProducesResponseType(StatusCodes.Status200OK)]
-
-
-        // The API may return:
-        //
-        // 400 Bad Request
-        //
-        // for invalid request data.
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-
-
-        // The API may return:
-        //
-        // 409 Conflict
-        //
-        // when a business conflict occurs.
-        //
-        // Example:
-        //
-        // Email already exists.
-        //
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-
-
-        // ====================================================
-        // REGISTER ACTION
-        // ====================================================
-
-        // This method handles the registration request.
-        //
-        // RegisterRequest contains the information required
-        // to create a new user.
-        //
-        // Example request:
-        //
-        // {
-        //     "username": "ashish",
-        //     "email": "ashish@gmail.com",
-        //     "password": "Password123"
-        // }
-        //
-        public async Task<IActionResult> Register(
-            RegisterRequest request)
+        [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+        public async Task<IActionResult> Register(RegisterRequest request)
         {
-            // =================================================
-            // CALL AUTHENTICATION SERVICE
-            // =================================================
-
-            // The controller delegates the actual registration
-            // business logic to the service layer.
+            // The request body is bound to RegisterRequest.
+            // With [ApiController], ASP.NET Core automatically validates
+            // its data annotations, such as [Required] and [StringLength].
             //
-            // Controller:
-            //     "I received the request."
+            // Pass the validated request to the authentication service.
+            // The service checks whether the username exists, hashes the
+            // password, and saves the new user in the database.
             //
-            // Service:
-            //     "I will perform the registration logic."
-            //
-            // The service may:
-            //
-            // 1. Check whether the user already exists.
-            // 2. Hash the password.
-            // 3. Create the User entity.
-            // 4. Save the user to SQL Server.
-            //
+            // await waits asynchronously for the operation to finish.
             var result = await _authService.RegisterAsync(request);
 
-
-            // =================================================
-            // RETURN SUCCESS RESPONSE
-            // =================================================
-
-            // Return HTTP 200 OK.
-            //
-            // The response is returned as JSON.
-            //
-            // Example:
-            //
-            // {
-            //     "message": "User registered successfully."
-            // }
-            //
-            return Ok(new
-            {
-                message = result
-            });
+            // Return HTTP 200 OK with a JSON message.
+            // Example: { "message": "User registered successfully." }
+            return Ok(new { message = result });
         }
 
-
-        // ====================================================
-        // LOGIN
-        // ====================================================
-
-        // This endpoint handles:
-        //
-        // POST /api/auth/login
-        //
-        // Login is a POST request because credentials are
-        // sent to the server in the request body.
+        // Endpoint: POST /api/auth/login
+        // Used to authenticate a user and obtain a JWT.
         [HttpPost("login")]
-
-
-        // Swagger documentation:
-        //
-        // Successful login:
-        //
-        // 200 OK
-        //
         [ProducesResponseType(StatusCodes.Status200OK)]
-
-
-        // Invalid request:
-        //
-        // 400 Bad Request
-        //
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-
-
-        // Invalid credentials:
-        //
-        // 401 Unauthorized
-        //
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // ====================================================
-        // LOGIN ACTION
-        // ====================================================
-
-        // LoginRequest contains the credentials supplied
-        // by the client.
-        //
-        // Example:
-        //
-        // {
-        //     "username": "ashish",
-        //     "password": "Password123"
-        // }
-        //
-        public async Task<IActionResult> Login(
-            LoginRequest request)
+        [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+        public async Task<IActionResult> Login(LoginRequest request)
         {
-            // =================================================
-            // AUTHENTICATE USER
-            // =================================================
+            // Ask the authentication service to verify the username
+            // and password.
+            //
+            // If the credentials are valid, the service returns a JWT.
+            // If they are invalid, it returns null.
+            var token = await _authService.LoginAsync(request);
 
-            // Send the login request to the authentication
-            // service.
-            //
-            // AuthService is responsible for:
-            //
-            // 1. Finding the user in the database.
-            // 2. Verifying the password.
-            // 3. Generating a JWT if credentials are valid.
-            //
-            // The controller doesn't need to know how
-            // password hashing or JWT generation works.
-            var result = await _authService.LoginAsync(request);
-
-
-            // =================================================
-            // LOGIN FAILED
-            // =================================================
-
-            // If LoginAsync returns null, authentication failed.
-            //
-            // Possible reason:
-            //
-            // - User does not exist
-            // - Password is incorrect
-            //
-            // We return:
-            //
-            // HTTP 401 Unauthorized
-            //
-            if (result == null)
+            // If no token was generated, authentication failed.
+            if (token == null)
             {
-                // Return a JSON response:
-                //
-                // {
-                //     "message": "Invalid username or password."
-                // }
-                //
+                // Return HTTP 401 Unauthorized with an error message.
+                // The same generic message is used for an invalid
+                // username or password.
                 return Unauthorized(new
                 {
                     message = "Invalid username or password."
                 });
             }
 
+            // Return HTTP 200 OK containing the generated JWT.
+            // Example: { "token": "eyJhbGciOi..." }
+            //
+            // The client can send this token in the Authorization header
+            // when calling protected endpoints.
+            return Ok(new { token });
+        }
 
-            // =================================================
-            // LOGIN SUCCESSFUL
-            // =================================================
+        // Endpoint: POST /api/auth/change-password
+        // Allows an authenticated user to change their own password.
+        [HttpPost("change-password")]
 
-            // If result is not null, authentication succeeded.
+        // Requires a valid authenticated identity.
+        // An unauthenticated request is normally rejected with HTTP 401
+        // before this action method executes.
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+        public async Task<IActionResult> ChangePassword(
+            ChangePasswordRequest request)
+        {
+            // Read the user's ID from the authenticated identity's claims.
             //
-            // The result contains the generated JWT token.
+            // JwtService adds this claim when creating the JWT:
+            // ClaimTypes.NameIdentifier = user.Id.ToString()
             //
-            // The client should store the token and send it
-            // with future protected API requests.
+            // If authentication succeeds, ASP.NET Core builds the User
+            // ClaimsPrincipal from the validated token.
+            var userIdValue = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            // Convert the claim value from a string into an integer.
+            // If the claim is missing or is not a valid integer,
+            // we cannot safely identify the account.
+            if (!int.TryParse(userIdValue, out var userId))
+            {
+                // Return HTTP 401 Unauthorized if the user ID is invalid.
+                return Unauthorized();
+            }
+
+            // Pass the authenticated user's ID and the requested
+            // password changes to the service.
             //
-            // Example:
-            //
-            // Authorization: Bearer <JWT>
-            //
+            // The service verifies the current password, hashes the
+            // new password, and saves the updated hash to the database.
+            var changed = await _authService.ChangePasswordAsync(
+                userId, request);
+
+            // The service returns false if the user was not found
+            // or the current password was incorrect.
+            if (!changed)
+            {
+                // Return HTTP 400 Bad Request with an error message.
+                return BadRequest(new
+                {
+                    message = "Current password is incorrect."
+                });
+            }
+
+            // Return HTTP 200 OK when the password change succeeds.
             return Ok(new
             {
-                token = result
+                message = "Password changed successfully."
             });
         }
     }

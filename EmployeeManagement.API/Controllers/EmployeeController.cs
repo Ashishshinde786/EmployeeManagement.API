@@ -1,770 +1,257 @@
-﻿
-// ============================================================
-// NAMESPACES / IMPORTS
-// ============================================================
-
-// Contains our DTO classes.
-//
-// DTO = Data Transfer Object.
-//
-// DTOs define what data the API accepts from the client
-// and what data we want to transfer between layers.
-//
-// Examples:
-//
-// CreateEmployeeRequest
-// UpdateEmployeeRequest
-//
-// Using DTOs prevents us from directly exposing our
-// database entity models through the API.
+﻿// Provides request DTOs and response DTOs used by employee endpoints.
 using EmployeeManagement.API.DTOs;
 
-
-// Contains employee service interfaces and implementations.
-//
-// The controller communicates with the Service layer
-// through IEmployeeService.
+// Provides IEmployeeService, which contains the employee operations
+// that this controller delegates to.
 using EmployeeManagement.API.Services;
 
-
-// Provides authentication and authorization attributes.
-//
-// We use:
-//
-// [Authorize]
-// [Authorize(Roles = "Admin")]
-//
-// to protect our API endpoints.
+// Provides [Authorize] and role-based authorization attributes.
 using Microsoft.AspNetCore.Authorization;
 
-
-// Provides ASP.NET Core MVC functionality.
-//
-// Contains:
-//
-// ControllerBase
-// ApiController
-// HttpGet
-// HttpPost
-// HttpPut
-// HttpDelete
-// IActionResult
-// ProducesResponseType
-//
-// etc.
+// Provides ControllerBase, routing attributes, and HTTP response methods.
 using Microsoft.AspNetCore.Mvc;
-
-
-// ============================================================
-// NAMESPACE
-// ============================================================
 
 namespace EmployeeManagement.API.Controllers
 {
-    // ========================================================
-    // API CONTROLLER CONFIGURATION
-    // ========================================================
-
-    // [ApiController] tells ASP.NET Core that this class
-    // is an API controller.
-    //
-    // It provides useful API behavior such as:
-    //
-    // 1. Automatic model binding
-    // 2. Automatic validation
-    // 3. Automatic 400 Bad Request for invalid models
-    // 4. Better API parameter handling
-    //
+    // Marks this class as an API controller.
+    // ASP.NET Core automatically validates DTOs that use validation
+    // attributes such as [Required], [EmailAddress], and [Range].
     [ApiController]
 
-
-    // ========================================================
-    // ROUTING
-    // ========================================================
-
-    // Defines the base route for all endpoints
-    // inside this controller.
-    //
-    // Because the route is:
-    //
-    // api/employees
-    //
-    // our endpoints become:
-    //
-    // GET     /api/employees
-    // GET     /api/employees/1
-    // POST    /api/employees
-    // PUT     /api/employees/1
-    // DELETE  /api/employees/1
-    //
+    // Sets the base URL for this controller.
+    // Unlike AuthController's dynamic route, this route is explicitly
+    // defined as /api/employees.
     [Route("api/employees")]
 
-
-    // ========================================================
-    // RESPONSE FORMAT
-    // ========================================================
-
-    // Tells ASP.NET Core that this controller produces
-    // JSON responses.
-    //
-    // JSON is commonly used for communication between
-    // frontend applications and REST APIs.
-    //
-    // Example:
-    //
-    // {
-    //     "id": 1,
-    //     "name": "Ashish"
-    // }
-    //
+    // Indicates that the controller produces JSON responses.
     [Produces("application/json")]
 
-
-    // ========================================================
-    // AUTHENTICATION
-    // ========================================================
-
-    // Protect the entire controller.
-    //
-    // This means every endpoint in this controller requires
-    // an authenticated user unless authorization is explicitly
-    // changed for a particular action.
-    //
-    // The client must send:
-    //
-    // Authorization: Bearer <JWT>
-    //
-    // Authentication checks:
-    //
-    // "Is this a valid authenticated user?"
-    //
+    // Requires the caller to be authenticated before accessing
+    // endpoints in this controller, unless an endpoint explicitly
+    // overrides this policy with an attribute such as [AllowAnonymous].
     [Authorize]
-
-
-    // ========================================================
-    // EMPLOYEE CONTROLLER
-    // ========================================================
-
     public class EmployeeController : ControllerBase
     {
-        // ====================================================
-        // EMPLOYEE SERVICE
-        // ====================================================
-
-        // The controller should not directly communicate
-        // with Entity Framework or SQL Server.
-        //
-        // Instead, it communicates with the service layer.
-        //
-        // Controller
-        //     ↓
-        // IEmployeeService
-        //     ↓
-        // EmployeeService
-        //
+        // Holds the employee service dependency.
+        // The controller delegates business operations to this service
+        // rather than directly accessing the database.
         private readonly IEmployeeService _employeeService;
 
-
-        // ====================================================
-        // CONSTRUCTOR / DEPENDENCY INJECTION
-        // ====================================================
-
-        // ASP.NET Core Dependency Injection automatically
-        // provides an implementation of IEmployeeService.
-        //
-        // Program.cs contains:
-        //
-        // builder.Services.AddScoped<
-        //     IEmployeeService,
-        //     EmployeeService>();
-        //
-        // Therefore ASP.NET Core creates EmployeeService
-        // and injects it into this controller.
+        // ASP.NET Core dependency injection supplies the service.
+        // Program.cs registers EmployeeService as the implementation
+        // of IEmployeeService.
         public EmployeeController(IEmployeeService employeeService)
         {
-            // Store the injected service.
+            // Store the injected service for use by the action methods.
             _employeeService = employeeService;
         }
 
-
-        // ============================================================
-        // GET ALL EMPLOYEES
-        // ============================================================
+        // GET /api/employees?page=1&pageSize=10&department=IT
+        //     &sortBy=name&sortOrder=asc
         //
-        // Accessible by:
+        // Retrieves a page of employees, optionally filtered by department
+        // and sorted by an allowed field.
         //
-        // Any authenticated user.
-        //
-        // Because the controller has:
-        //
-        // [Authorize]
-        //
-        // but this action does not have:
-        //
-        // [Authorize(Roles = "Admin")]
-        //
-        // both User and Admin can access it.
-        //
-        // This endpoint supports:
-        //
-        // Pagination
-        // Filtering
-        // Sorting
-        // ============================================================
-
-        // HTTP GET request.
-        //
-        // Endpoint:
-        //
-        // GET /api/employees
-        //
+        // Any authenticated user can access this endpoint.
         [HttpGet]
 
-
-        // Swagger/OpenAPI documentation.
-        //
-        // Successful response:
-        //
-        // 200 OK
-        //
-        [ProducesResponseType(StatusCodes.Status200OK)]
-
-
-        // Invalid pagination parameters:
-        //
-        // 400 Bad Request
-        //
+        // Documents the expected response types for Swagger and API clients.
+        [ProducesResponseType(
+            typeof(PagedEmployeeResponse),
+            StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-
-
-        // User is not authenticated:
-        //
-        // 401 Unauthorized
-        //
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // ====================================================
-        // GET ALL EMPLOYEES METHOD
-        // ====================================================
-
         public async Task<IActionResult> GetAllEmployees(
-
-            // Page number.
-            //
-            // Default:
-            // page = 1
-            //
-            // Example:
-            //
-            // ?page=2
+            // Page number requested by the client.
+            // Defaults to page 1 when not supplied.
             int page = 1,
 
-
-            // Number of records per page.
-            //
-            // Default:
-            // pageSize = 10
-            //
-            // Example:
-            //
-            // ?pageSize=20
+            // Maximum number of employees requested for one page.
+            // Defaults to 10.
             int pageSize = 10,
 
-
             // Optional department filter.
-            //
-            // Example:
-            //
-            // ?department=IT
-            //
-            // ?department=HR
-            //
-            // The ? means this value can be null.
+            // Example: ?department=IT
             string? department = null,
 
-
-            // Optional field used for sorting.
-            //
-            // Example:
-            //
-            // ?sortBy=name
-            //
-            // ?sortBy=salary
+            // Optional sorting field.
+            // The repository supports name, salary, and department.
             string? sortBy = null,
 
-
-            // Sorting direction.
-            //
-            // Default is ascending.
-            //
-            // Example:
-            //
-            // ?sortOrder=asc
-            //
-            // ?sortOrder=desc
+            // Sort direction: "asc" or "desc".
+            // Defaults to ascending order.
             string? sortOrder = "asc")
         {
-            // =================================================
-            // VALIDATE PAGE
-            // =================================================
-
-            // Page numbers should start from 1.
-            //
-            // Page 0 or negative pages don't make sense.
-            //
-            // Example:
-            //
-            // /api/employees?page=0
-            //
-            // returns:
-            //
-            // 400 Bad Request
+            // Validate the page number.
+            // Page numbers start at 1, not 0.
             if (page < 1)
             {
-                return BadRequest(
-                    "Page must be greater than 0.");
+                // Return HTTP 400 when the requested page is invalid.
+                return BadRequest("Page must be greater than 0.");
             }
 
-
-            // =================================================
-            // VALIDATE PAGE SIZE
-            // =================================================
-
-            // We don't allow unlimited records to be returned.
-            //
-            // Example:
-            //
-            // pageSize = 100000
-            //
-            // could cause a large database query and
-            // unnecessary memory/network usage.
-            //
-            // Therefore we allow:
-            //
-            // 1 to 100 records per page.
+            // Prevent invalid or excessively large page sizes.
+            // This endpoint allows between 1 and 100 employees per page.
             if (pageSize < 1 || pageSize > 100)
             {
                 return BadRequest(
                     "PageSize must be between 1 and 100.");
             }
 
-
-            // =================================================
-            // CALL SERVICE
-            // =================================================
-
-            // Pass pagination, filtering and sorting
-            // information to the service layer.
+            // Delegate filtering, sorting, pagination, and retrieval
+            // to the employee service.
             //
-            // The controller is responsible for handling
-            // HTTP concerns.
-            //
-            // The service is responsible for business logic
-            // and data retrieval logic.
-            var result =
-                await _employeeService.GetPagedAsync(
-                    page,
-                    pageSize,
-                    department,
-                    sortBy,
-                    sortOrder);
+            // The service calls the repository, maps database entities
+            // to response DTOs, and calculates the total number of pages.
+            var result = await _employeeService.GetPagedAsync(
+                page,
+                pageSize,
+                department,
+                sortBy,
+                sortOrder);
 
-
-            // =================================================
-            // RETURN RESPONSE
-            // =================================================
-
-            // Return HTTP 200 OK with the result.
-            //
-            // ASP.NET Core automatically serializes the result
-            // into JSON.
+            // Return HTTP 200 OK with the paginated employee response.
+            // The response includes the employee list, current page,
+            // page size, total records, and total pages.
             return Ok(result);
         }
 
-
-        // ============================================================
-        // GET EMPLOYEE BY ID
-        // ============================================================
-        //
-        // Accessible by:
-        //
-        // User + Admin
-        //
-        // because the controller already has [Authorize].
-        //
-        // ============================================================
-
-        // HTTP GET request with route parameter.
-        //
-        // Endpoint:
-        //
-        // GET /api/employees/{id}
-        //
-        // Example:
-        //
         // GET /api/employees/10
         //
-        [HttpGet("{id}")]
+        // Retrieves one employee using the employee ID in the URL.
+        // Any authenticated user can access this endpoint.
+        [HttpGet("{id:int}")]
 
-
-        // Possible response:
-        //
-        // 200 OK
-        //
-        [ProducesResponseType(StatusCodes.Status200OK)]
-
-
-        // User is not authenticated:
-        //
-        // 401 Unauthorized
-        //
+        // Documents the possible response types.
+        [ProducesResponseType(
+            typeof(EmployeeResponse),
+            StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // Employee doesn't exist:
-        //
-        // 404 Not Found
-        //
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-
-
-        // ====================================================
-        // GET EMPLOYEE BY ID
-        // ====================================================
-
         public async Task<IActionResult> GetEmployeeById(int id)
         {
-            // =================================================
-            // FIND EMPLOYEE
-            // =================================================
+            // Ask the service to retrieve the employee with this ID.
+            // The service returns an EmployeeResponse or null if missing.
+            var employee = await _employeeService.GetByIdAsync(id);
 
-            // Send the employee ID to the service layer.
-            //
-            // The service will retrieve the employee
-            // from the database.
-            var employee =
-                await _employeeService.GetByIdAsync(id);
-
-
-            // =================================================
-            // EMPLOYEE NOT FOUND
-            // =================================================
-
-            // If the service returns null, no employee
-            // exists with this ID.
-            //
-            // HTTP 404 means:
-            //
-            // "The requested resource was not found."
+            // Check whether the service found the requested employee.
             if (employee == null)
             {
+                // Return HTTP 404 Not Found if the employee does not exist.
                 return NotFound();
             }
 
-
-            // =================================================
-            // SUCCESS
-            // =================================================
-
-            // Return HTTP 200 OK and employee data.
+            // Return HTTP 200 OK with the employee's response DTO.
             return Ok(employee);
         }
 
-
-        // ============================================================
-        // CREATE EMPLOYEE
-        // ============================================================
-        //
-        // Only Admin users can create employees.
-        //
-        // ============================================================
-
-        // This overrides the controller-level [Authorize]
-        // with a more specific authorization requirement.
-        //
-        // The user must:
-        //
-        // 1. Be authenticated.
-        // 2. Have the "Admin" role.
-        //
-        [Authorize(Roles = "Admin")]
-
-
-        // HTTP POST:
-        //
         // POST /api/employees
         //
+        // Creates a new employee.
+        // Only users with the Admin role can access this endpoint.
         [HttpPost]
+        [Authorize(Roles = "Admin")]
 
-
-        // Successful creation:
-        //
-        // 201 Created
-        //
-        [ProducesResponseType(StatusCodes.Status201Created)]
-
-
-        // Invalid request:
-        //
-        // 400 Bad Request
-        //
+        // A successful creation returns HTTP 201 Created.
+        [ProducesResponseType(
+            typeof(EmployeeResponse),
+            StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-
-
-        // No valid authentication:
-        //
-        // 401 Unauthorized
-        //
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // Authenticated but not an Admin:
-        //
-        // 403 Forbidden
-        //
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-
-
-        // ====================================================
-        // CREATE EMPLOYEE
-        // ====================================================
-
         public async Task<IActionResult> CreateEmployee(
+            // Contains the employee data supplied in the request body.
+            // Its validation attributes are checked automatically
+            // by ASP.NET Core when model validation runs.
             CreateEmployeeRequest request)
         {
-            // =================================================
-            // CREATE EMPLOYEE
-            // =================================================
-
-            // Send the request DTO to the service.
-            //
-            // Service layer handles the actual business logic.
+            // Ask the service to create the employee.
+            // The service maps the DTO to an Employee entity,
+            // saves it through the repository, and returns a response DTO.
             var createdEmployee =
                 await _employeeService.CreateAsync(request);
 
-
-            // =================================================
-            // RETURN 201 CREATED
-            // =================================================
-
-            // CreatedAtAction returns:
+            // Return HTTP 201 Created.
             //
-            // 201 Created
+            // nameof(GetEmployeeById) identifies the action that can
+            // retrieve the new employee.
             //
-            // and also provides the URL for retrieving
-            // the newly created employee.
+            // new { id = createdEmployee.Id } supplies the route value
+            // for that action.
             //
-            // Example:
-            //
-            // New employee ID = 10
-            //
-            // Location:
-            //
-            // /api/employees/10
-            //
-            // nameof(GetEmployeeById)
-            // tells ASP.NET Core which action can retrieve
-            // the newly created resource.
+            // createdEmployee becomes the JSON response body.
+            // ASP.NET Core also generates a Location header pointing
+            // to the newly created resource.
             return CreatedAtAction(
                 nameof(GetEmployeeById),
-
-                // Route values required by GetEmployeeById.
                 new { id = createdEmployee.Id },
-
-                // Body of the response.
                 createdEmployee);
         }
 
-
-        // ============================================================
-        // UPDATE EMPLOYEE
-        // ============================================================
-        //
-        // Only Admin users can update employees.
-        //
-        // ============================================================
-
-        [Authorize(Roles = "Admin")]
-
-
-        // HTTP PUT:
-        //
-        // PUT /api/employees/{id}
-        //
-        // Example:
-        //
         // PUT /api/employees/10
         //
-        [HttpPut("{id}")]
+        // Updates an existing employee.
+        // Only users with the Admin role can access this endpoint.
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin")]
 
-
-        // Successful update:
-        //
-        // 204 No Content
-        //
+        // HTTP 204 means the update succeeded and no response body
+        // is required.
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-
-
-        // Invalid request:
-        //
-        // 400 Bad Request
-        //
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-
-
-        // User not authenticated:
-        //
-        // 401 Unauthorized
-        //
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // User authenticated but not Admin:
-        //
-        // 403 Forbidden
-        //
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-
-
-        // Employee not found:
-        //
-        // 404 Not Found
-        //
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-
-
-        // ====================================================
-        // UPDATE EMPLOYEE
-        // ====================================================
-
         public async Task<IActionResult> UpdateEmployee(
+            // Employee ID comes from the URL.
             int id,
+
+            // Updated employee data comes from the request body.
             UpdateEmployeeRequest request)
         {
-            // =================================================
-            // UPDATE EMPLOYEE
-            // =================================================
-
-            // Send employee ID and update DTO to service.
-            //
-            // The service returns true if the employee
-            // was successfully updated.
+            // Ask the service to update the employee.
+            // The service returns true if the update succeeds,
+            // or false if the employee does not exist.
             var updated =
-                await _employeeService.UpdateAsync(
-                    id,
-                    request);
+                await _employeeService.UpdateAsync(id, request);
 
-
-            // =================================================
-            // EMPLOYEE NOT FOUND
-            // =================================================
-
-            // If false is returned, the employee doesn't exist.
+            // If the service could not find the employee,
+            // return HTTP 404 Not Found.
             if (!updated)
             {
                 return NotFound();
             }
 
-
-            // =================================================
-            // UPDATE SUCCESSFUL
-            // =================================================
-
-            // 204 No Content means:
-            //
-            // "The request was successfully processed,
-            // but there is no response body to return."
+            // Return HTTP 204 No Content after a successful update.
             return NoContent();
         }
 
-
-        // ============================================================
-        // DELETE EMPLOYEE
-        // ============================================================
-        //
-        // Only Admin users can delete employees.
-        //
-        // ============================================================
-
-        [Authorize(Roles = "Admin")]
-
-
-        // HTTP DELETE:
-        //
-        // DELETE /api/employees/{id}
-        //
-        // Example:
-        //
         // DELETE /api/employees/10
         //
-        [HttpDelete("{id}")]
+        // Deletes an employee using the ID in the URL.
+        // Only users with the Admin role can access this endpoint.
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin")]
 
-
-        // Successful deletion:
-        //
-        // 204 No Content
-        //
+        // Documents the possible HTTP responses.
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-
-
-        // User not authenticated:
-        //
-        // 401 Unauthorized
-        //
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-
-
-        // User authenticated but not Admin:
-        //
-        // 403 Forbidden
-        //
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-
-
-        // Employee doesn't exist:
-        //
-        // 404 Not Found
-        //
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-
-
-        // ====================================================
-        // DELETE EMPLOYEE
-        // ====================================================
-
         public async Task<IActionResult> DeleteEmployee(int id)
         {
-            // =================================================
-            // DELETE EMPLOYEE
-            // =================================================
+            // Ask the service to delete the employee.
+            // The service first checks whether the employee exists.
+            var deleted = await _employeeService.DeleteAsync(id);
 
-            // Pass employee ID to the service layer.
-            //
-            // Service performs the actual delete operation.
-            var deleted =
-                await _employeeService.DeleteAsync(id);
-
-
-            // =================================================
-            // EMPLOYEE NOT FOUND
-            // =================================================
-
-            // If false is returned, there was no employee
-            // with the specified ID.
+            // If the employee does not exist, the service returns false.
             if (!deleted)
             {
                 return NotFound();
             }
 
-
-            // =================================================
-            // DELETE SUCCESSFUL
-            // =================================================
-
-            // Return HTTP 204 No Content.
+            // Return HTTP 204 No Content when deletion succeeds.
             return NoContent();
         }
     }
 }
-

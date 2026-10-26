@@ -1,163 +1,34 @@
 ﻿
-// ============================================================
-// REQUIRED NAMESPACES
-// ============================================================
-
-// Provides access to AppDbContext.
-//
-// AppDbContext is our EF Core database context that connects
-// the application with the SQL Server database.
 using EmployeeManagement.API.Data;
-
-
-// Provides access to the Employee entity/model.
-//
-// EmployeeRepository works with Employee objects when
-// reading, creating, updating, and deleting employee data.
 using EmployeeManagement.API.Models;
-
-
-// Provides Entity Framework Core functionality.
-//
-// We use EF Core methods such as:
-//
-// - AsQueryable()
-// - Where()
-// - CountAsync()
-// - OrderBy()
-// - OrderByDescending()
-// - Skip()
-// - Take()
-// - ToListAsync()
-// - FindAsync()
-// - AddAsync()
-// - SaveChangesAsync()
-//
-// These methods allow us to interact with the database
-// using C# and LINQ.
 using Microsoft.EntityFrameworkCore;
 
-
-// ============================================================
-// NAMESPACE
-// ============================================================
-
-// Repository classes are placed inside the Repositories
-// namespace.
-//
-// The repository layer is responsible for database access.
-//
-// Architecture:
-//
-// Controller
-//     ↓
-// Service
-//     ↓
-// Repository
-//     ↓
-// AppDbContext
-//     ↓
-// SQL Server
 namespace EmployeeManagement.API.Repositories
 {
-    // ========================================================
-    // EMPLOYEE REPOSITORY
-    // ========================================================
-
-    // EmployeeRepository implements IEmployeeRepository.
-    //
-    // IEmployeeRepository defines the database operations
-    // that the EmployeeRepository must provide.
-    //
-    // This class contains the actual implementation of those
-    // database operations.
-    //
-    // Main responsibilities:
-    //
-    // - Get employees
-    // - Filter employees
-    // - Sort employees
-    // - Paginate employees
-    // - Get employee by ID
-    // - Add employee
-    // - Update employee
-    // - Delete employee
-    // - Save changes to database
+    // EmployeeRepository contains the database operations for Employee.
+    // It implements IEmployeeRepository, which defines the operations
+    // that an employee repository must provide.
     public class EmployeeRepository : IEmployeeRepository
     {
-        // ====================================================
-        // DATABASE CONTEXT
-        // ====================================================
-
-        // _context represents our EF Core database context.
-        //
-        // AppDbContext provides access to database tables
-        // through DbSet properties.
-        //
-        // In our AppDbContext we have:
-        //
-        // DbSet<Employee> Employees
-        //
-        // Therefore we can access the Employees table using:
-        //
-        // _context.Employees
-        //
-        // readonly means that after the constructor assigns
-        // the context, this field cannot be reassigned.
+        // AppDbContext provides access to the database through EF Core.
+        // readonly means this field can be assigned only during declaration
+        // or inside the constructor.
         private readonly AppDbContext _context;
 
-
-        // ====================================================
-        // CONSTRUCTOR
-        // ====================================================
-
-        // The constructor receives AppDbContext through
-        // Dependency Injection.
-        //
-        // Program.cs contains the registration:
-        //
-        // AddDbContext<AppDbContext>(...)
-        //
-        // ASP.NET Core creates the AppDbContext and injects
-        // it into this repository.
+        // Constructor injection:
+        // ASP.NET Core's Dependency Injection container provides AppDbContext.
         public EmployeeRepository(AppDbContext context)
         {
-            // Store the injected database context in the
-            // private field so all repository methods can
-            // use it.
             _context = context;
         }
 
-
-        // ====================================================
-        // GET ALL EMPLOYEES
-        // FILTERING + SORTING + PAGINATION
-        // ====================================================
-
-        // This method retrieves employees from the database
-        // using:
+        // Retrieves employees using filtering, sorting, and pagination.
         //
-        // 1. Filtering
-        // 2. Sorting
-        // 3. Pagination
+        // Returns:
+        // 1. Employees: the employees for the requested page.
+        // 2. TotalRecords: the total matching employees before pagination.
         //
-        // It returns two values:
-        //
-        // Employees
-        //     → Employees for the requested page
-        //
-        // TotalRecords
-        //     → Total number of records after filtering
-        //
-        // The return type is a named tuple:
-        //
-        // (
-        //     List<Employee> Employees,
-        //     int TotalRecords
-        // )
-        //
-        // async/await is used because database operations are
-        // I/O operations and should not block the request thread.
+        // The ? after string means the parameter can be null.
         public async Task<(List<Employee> Employees, int TotalRecords)> GetPagedAsync(
             int page,
             int pageSize,
@@ -165,391 +36,140 @@ namespace EmployeeManagement.API.Repositories
             string? sortBy,
             string? sortOrder)
         {
-            // =================================================
-            // START QUERY
-            // =================================================
+            // Access the Employees table through AppDbContext.
+            //
+            // AsNoTracking() improves read-only query performance because
+            // EF Core does not track the returned entities for changes.
+            //
+            // AsQueryable() allows us to build the query conditionally.
+            // The database query is generally executed when an operation
+            // such as CountAsync() or ToListAsync() is called.
+            var query = _context.Employees
+                .AsNoTracking()
+                .AsQueryable();
 
-            // Start with the Employees table.
+            // STEP 1: FILTERING
             //
-            // AsQueryable() creates an IQueryable<Employee>.
-            //
-            // This is important because we can continue building
-            // the query dynamically by adding:
-            //
-            // Where()
-            // OrderBy()
-            // Skip()
-            // Take()
-            //
-            // EF Core can translate the final LINQ query into
-            // SQL and execute it in the database.
-            var query = _context.Employees.AsQueryable();
-
-
-            // =================================================
-            // 1. FILTERING
-            // =================================================
-
-            // Check whether a department filter was provided.
-            //
-            // string.IsNullOrWhiteSpace() returns true when:
-            //
-            // - department is null
-            // - department is empty
-            // - department contains only spaces
-            //
-            // We only apply the filter when a meaningful
-            // department value is provided.
+            // Apply a department filter only when a non-empty department
+            // value has been provided.
             if (!string.IsNullOrWhiteSpace(department))
             {
-                // Add a WHERE condition to the query.
-                //
-                // Only employees whose Department exactly
-                // matches the requested department are selected.
-                //
-                // Example:
-                //
-                // department = "IT"
-                //
-                // Conceptually:
-                //
-                // SELECT *
-                // FROM Employees
-                // WHERE Department = 'IT'
-                //
-                query = query.Where(e =>
-                    e.Department == department);
+                // Keep only employees belonging to the requested department.
+                query = query.Where(e => e.Department == department);
             }
 
-
-            // =================================================
-            // 2. COUNT FILTERED RECORDS
-            // =================================================
-
-            // Count the records after applying the department
-            // filter.
+            // STEP 2: COUNT MATCHING RECORDS
             //
-            // This value is required to calculate:
+            // Count after filtering but before pagination.
+            // This gives the total number of matching employees,
+            // not just the number displayed on the current page.
+            var totalRecords = await query.CountAsync();
+
+            // STEP 3: DETERMINE SORT DIRECTION
             //
-            // TotalRecords
+            // If sortOrder is "desc", use descending order.
+            // Ignore capitalization, so "DESC" and "desc" both work.
+            var desc = string.Equals(
+                sortOrder,
+                "desc",
+                StringComparison.OrdinalIgnoreCase);
+
+            // STEP 4: SORTING
+            //
+            // Select the sorting column requested by the caller.
+            // ToLowerInvariant() makes the sortBy comparison case-insensitive.
+            //
+            // ThenBy(e => e.Id) provides a consistent secondary ordering
+            // when multiple employees have the same primary sort value.
+            query = sortBy?.ToLowerInvariant() switch
+            {
+                // Sort by employee name.
+                "name" => desc
+                    ? query.OrderByDescending(e => e.Name).ThenBy(e => e.Id)
+                    : query.OrderBy(e => e.Name).ThenBy(e => e.Id),
+
+                // Sort by employee salary.
+                "salary" => desc
+                    ? query.OrderByDescending(e => e.Salary).ThenBy(e => e.Id)
+                    : query.OrderBy(e => e.Salary).ThenBy(e => e.Id),
+
+                // Sort by department name.
+                "department" => desc
+                    ? query.OrderByDescending(e => e.Department).ThenBy(e => e.Id)
+                    : query.OrderBy(e => e.Department).ThenBy(e => e.Id),
+
+                // If sortBy is missing or unsupported, sort by employee ID.
+                _ => query.OrderBy(e => e.Id)
+            };
+
+            // STEP 5: PAGINATION
+            //
+            // Skip records belonging to previous pages.
+            // Take only the number of records requested for this page.
             //
             // Example:
-            //
-            // Database has 100 employees.
-            //
-            // Department = IT
-            //
-            // There are 35 IT employees.
-            //
-            // TotalRecords = 35
-            //
-            // CountAsync() executes the COUNT operation in the
-            // database asynchronously.
-            var totalRecords =
-                await query.CountAsync();
-
-
-            // =================================================
-            // 3. SORTING
-            // =================================================
-
-            // Check whether the client requested sorting by
-            // employee name.
-            //
-            // StringComparison.OrdinalIgnoreCase makes the
-            // comparison case-insensitive.
-            //
-            // Therefore:
-            //
-            // "name"
-            // "Name"
-            // "NAME"
-            //
-            // are treated as the same value.
-            if (string.Equals(
-                sortBy,
-                "name",
-                StringComparison.OrdinalIgnoreCase))
-            {
-                // Check whether descending order was requested.
-                //
-                // If sortOrder = "desc":
-                //
-                // Z → A
-                //
-                // Otherwise:
-                //
-                // A → Z
-                query = string.Equals(
-                    sortOrder,
-                    "desc",
-                    StringComparison.OrdinalIgnoreCase)
-                    ? query.OrderByDescending(e => e.Name)
-                    : query.OrderBy(e => e.Name);
-            }
-
-
-            // =================================================
-            // SORT BY SALARY
-            // =================================================
-
-            // If sortBy is "salary", sort employees according
-            // to their salary.
-            else if (string.Equals(
-                sortBy,
-                "salary",
-                StringComparison.OrdinalIgnoreCase))
-            {
-                // Descending:
-                //
-                // Highest salary → Lowest salary
-                //
-                // Ascending:
-                //
-                // Lowest salary → Highest salary
-                query = string.Equals(
-                    sortOrder,
-                    "desc",
-                    StringComparison.OrdinalIgnoreCase)
-                    ? query.OrderByDescending(e => e.Salary)
-                    : query.OrderBy(e => e.Salary);
-            }
-
-
-            // =================================================
-            // SORT BY DEPARTMENT
-            // =================================================
-
-            // If sortBy is "department", sort employees by
-            // department name.
-            else if (string.Equals(
-                sortBy,
-                "department",
-                StringComparison.OrdinalIgnoreCase))
-            {
-                // Descending:
-                //
-                // Z → A
-                //
-                // Ascending:
-                //
-                // A → Z
-                query = string.Equals(
-                    sortOrder,
-                    "desc",
-                    StringComparison.OrdinalIgnoreCase)
-                    ? query.OrderByDescending(e => e.Department)
-                    : query.OrderBy(e => e.Department);
-            }
-
-
-            // =================================================
-            // DEFAULT SORTING
-            // =================================================
-
-            // If the client does not provide a supported
-            // sortBy value, we use Id as the default sorting.
-            //
-            // This gives the query a predictable order.
-            else
-            {
-                query = query.OrderBy(e => e.Id);
-            }
-
-
-            // =================================================
-            // 4. PAGINATION
-            // =================================================
-
-            // Skip() and Take() are used to implement
-            // pagination.
-            //
-            // Formula:
-            //
-            // Skip = (page - 1) * pageSize
-            //
-            // Example:
-            //
-            // page = 1
-            // pageSize = 10
-            //
-            // Skip = (1 - 1) * 10
-            // Skip = 0
-            //
-            // So the first 10 records are returned.
-            //
-            // Example:
-            //
-            // page = 2
-            // pageSize = 10
-            //
-            // Skip = (2 - 1) * 10
-            // Skip = 10
-            //
-            // So records 1-10 are skipped and records 11-20
-            // are returned.
-            //
-            // Take(pageSize) limits the number of records
-            // returned for the current page.
+            // page = 2, pageSize = 10
+            // Skip((2 - 1) * 10) = Skip(10)
+            // Take(10) returns the next 10 employees.
             var employees = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
-
-            // =================================================
-            // RETURN RESULT
-            // =================================================
-
-            // Return both:
-            //
-            // employees
-            //     → Data for the requested page
-            //
-            // totalRecords
-            //     → Total number of matching records
-            //
-            // The service layer uses these values to create
-            // PagedEmployeeResponse.
-            return (
-                employees,
-                totalRecords
-            );
+            // Return both the current page of employees and the total count.
+            // These are named tuple elements: Employees and TotalRecords.
+            return (employees, totalRecords);
         }
 
-
-        // ====================================================
-        // GET EMPLOYEE BY ID
-        // ====================================================
-
-        // Retrieves a single employee using its ID.
+        // Finds an employee by primary key (Id).
         //
-        // Example:
-        //
-        // GET /api/employees/10
-        //
-        // id = 10
-        //
-        // If the employee exists:
-        //
-        // Employee object is returned.
-        //
-        // If it does not exist:
-        //
-        // null is returned.
+        // Returns the Employee if found; otherwise, returns null.
         public async Task<Employee?> GetByIdAsync(int id)
         {
-            // FindAsync() searches for an entity using its
-            // primary key.
-            //
-            // Since Employee.Id is the primary key, EF Core
-            // searches for the employee with the specified ID.
-            //
-            // The ? in Employee? means the result can be null.
-            return await _context.Employees
-                .FindAsync(id);
+            // FindAsync searches for the entity using its primary key.
+            return await _context.Employees.FindAsync(id);
         }
 
-
-        // ====================================================
-        // CREATE EMPLOYEE
-        // ====================================================
-
-        // Adds a new Employee entity to the EF Core context.
+        // Adds a new employee to EF Core's change tracker.
         //
-        // Important:
-        //
-        // AddAsync() does not necessarily mean the record has
-        // already been inserted into SQL Server.
-        //
-        // The actual database INSERT happens when:
-        //
-        // SaveChangesAsync()
-        //
-        // is called.
+        // This method does not itself guarantee that the record is
+        // saved to the database. SaveChangesAsync() persists the change.
         public async Task AddAsync(Employee employee)
         {
-            // Add the employee to EF Core's change tracker.
-            //
-            // EF Core marks this entity as Added.
-            //
-            // Later, SaveChangesAsync() generates the SQL INSERT.
-            await _context.Employees
-                .AddAsync(employee);
+            await _context.Employees.AddAsync(employee);
         }
 
-
-        // ====================================================
-        // UPDATE EMPLOYEE
-        // ====================================================
-
-        // Updates an existing employee entity.
+        // Marks the employee entity as modified in EF Core.
+        //
+        // The database update is persisted when SaveChangesAsync() runs.
         public Task UpdateAsync(Employee employee)
         {
-            // Tell EF Core that this entity should be treated
-            // as modified.
-            //
-            // EF Core tracks the entity as Modified.
-            //
-            // When SaveChangesAsync() is called, EF Core
-            // generates the required SQL UPDATE statement.
-            _context.Employees
-                .Update(employee);
+            _context.Employees.Update(employee);
 
-            // This method does not need to perform asynchronous
-            // work itself.
-            //
-            // The actual database operation happens later
-            // inside SaveChangesAsync().
+            // The EF Core Update() method is synchronous.
+            // Return a completed Task to match this method's Task-based signature.
             return Task.CompletedTask;
         }
 
-
-        // ====================================================
-        // DELETE EMPLOYEE
-        // ====================================================
-
-        // Marks an employee for deletion.
+        // Marks the employee entity for deletion.
+        //
+        // The actual database deletion happens when SaveChangesAsync() runs.
         public Task DeleteAsync(Employee employee)
         {
-            // Tell EF Core that the employee should be deleted.
-            //
-            // EF Core marks the entity as Deleted.
-            //
-            // The actual DELETE SQL command is executed when
-            // SaveChangesAsync() is called.
-            _context.Employees
-                .Remove(employee);
+            _context.Employees.Remove(employee);
 
-            // No asynchronous database operation is performed
-            // at this point.
-            //
-            // The actual database operation happens in
-            // SaveChangesAsync().
+            // Remove() is synchronous, so no actual asynchronous work
+            // needs to be awaited in this method.
             return Task.CompletedTask;
         }
 
-
-        // ====================================================
-        // SAVE CHANGES
-        // ====================================================
-
-        // Persists all pending changes tracked by EF Core
-        // to the database.
+        // Persists pending tracked changes to the database.
         //
-        // This is where EF Core actually sends INSERT, UPDATE,
-        // and DELETE commands to SQL Server.
+        // This is where pending Add, Update, and Remove operations
+        // are normally sent to the database.
         public async Task SaveChangesAsync()
         {
-            // Save all pending changes asynchronously.
-            //
-            // Examples:
-            //
-            // Added entity    → INSERT
-            // Modified entity → UPDATE
-            // Deleted entity  → DELETE
             await _context.SaveChangesAsync();
         }
     }
 }
-

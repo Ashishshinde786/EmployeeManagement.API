@@ -1,980 +1,260 @@
-// ============================================================
-// REQUIRED NAMESPACES / IMPORTS
-// ============================================================
-
-// Contains our Entity Framework Core DbContext.
-// AppDbContext is responsible for communicating with SQL Server.
 using EmployeeManagement.API.Data;
-
-
-// Contains our custom global exception handling middleware.
-//
-// This middleware catches unexpected exceptions from the API
-// and returns a standard HTTP error response instead of exposing
-// technical exception details to the client.
 using EmployeeManagement.API.Middleware;
-
-
-// Contains the User entity/model.
-//
-// We use User with ASP.NET Core's PasswordHasher<User>
-// to securely hash and verify passwords.
 using EmployeeManagement.API.Models;
-
-
-// Contains Repository interfaces and implementations.
-//
-// Repository layer is responsible for database-related operations.
-//
-// Example:
-// Controller
-//     ↓
-// Service
-//     ↓
-// Repository
-//     ↓
-// Entity Framework Core
-//     ↓
-// SQL Server
 using EmployeeManagement.API.Repositories;
-
-
-// Contains Service interfaces and implementations.
-//
-// Service layer contains business logic.
-//
-// Example:
-// EmployeeController
-//      ↓
-// IEmployeeService
-//      ↓
-// EmployeeService
-//      ↓
-// IEmployeeRepository
-//      ↓
-// EmployeeRepository
 using EmployeeManagement.API.Services;
-
-
-// ASP.NET Core password hashing functionality.
-//
-// IPasswordHasher<User> provides methods such as:
-//
-// HashPassword()
-// VerifyHashedPassword()
-//
-// We use it instead of storing plain-text passwords.
-using Microsoft.AspNetCore.Identity;
-
-
-// Provides JWT Bearer authentication.
-//
-// JWT authentication allows clients to send a JWT token
-// with every protected API request.
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-
-
-// Contains classes required to validate JWT tokens.
-//
-// TokenValidationParameters defines rules such as:
-//
-// - Should signature be validated?
-// - Should issuer be validated?
-// - Should audience be validated?
-// - Should expiration be validated?
-using Microsoft.IdentityModel.Tokens;
-
-
-// Used to convert our JWT secret key string into bytes.
-//
-// Example:
-//
-// "my-secret-key"
-//       ↓
-// UTF8 bytes
-//       ↓
-// SymmetricSecurityKey
-using System.Text;
-
-
-// Provides OpenAPI / Swagger security configuration.
-//
-// We use this to configure the Swagger "Authorize" button
-// for JWT authentication.
-using Microsoft.OpenApi;
-
-
-// Provides Entity Framework Core functionality.
-//
-// Required for:
-// - UseSqlServer()
-// - DbContext configuration
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.RateLimiting;
 
-
-// ============================================================
-// CREATE APPLICATION BUILDER
-// ============================================================
-
-// WebApplication.CreateBuilder(args) creates the ASP.NET Core
-// application builder.
-//
-// The builder is responsible for preparing:
-//
-// - Dependency Injection container
-// - Configuration
-// - Logging
-// - Environment information
-// - Web server configuration
-// - Application services
-//
-// At this stage, the application is being CONFIGURED.
-// It has not started accepting HTTP requests yet.
+// Create the application builder.
+// It provides configuration, logging and dependency injection.
 var builder = WebApplication.CreateBuilder(args);
 
-
 // ============================================================
-// MVC / WEB API CONFIGURATION
+// 1. REGISTER CONTROLLERS
 // ============================================================
 
-// Register ASP.NET Core MVC Controller support.
-//
-// This tells ASP.NET Core that our application uses Controllers
-// to handle HTTP requests.
-//
-// Example:
-//
-// POST /api/employees
-//        ↓
-// EmployeeController
-//
-// GET /api/employees/1
-//        ↓
-// EmployeeController
-//
-// Without AddControllers(), controller-based APIs
-// will not be registered correctly.
+// Enables MVC controllers to handle incoming API requests.
 builder.Services.AddControllers();
 
-
 // ============================================================
-// DATABASE CONFIGURATION
+// 2. DATABASE CONFIGURATION
 // ============================================================
 
-// Register Entity Framework Core DbContext.
-//
-// AppDbContext acts as a bridge between our application
-// and SQL Server.
-//
-// Application
-//     ↓
-// AppDbContext
-//     ↓
-// Entity Framework Core
-//     ↓
-// SQL Server
-//
-// AddDbContext() also registers AppDbContext in the
-// Dependency Injection container.
-//
-// By default, DbContext is registered with Scoped lifetime.
-//
-// That means one DbContext instance is normally created
-// for each HTTP request.
+// Register AppDbContext and configure it to use SQL Server.
+// The connection string is read from configuration.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    ));
-
-
-// ------------------------------------------------------------
-// HOW CONNECTION STRING WORKS
-// ------------------------------------------------------------
-//
-// builder.Configuration reads configuration from sources
-// such as:
-//
-// appsettings.json
-// appsettings.Development.json
-// environment variables
-// command-line arguments
-//
-// Example appsettings.json:
-//
-// "ConnectionStrings": {
-//     "DefaultConnection":
-//       "Server=(localdb)\\MSSQLLocalDB;Database=EmployeeDb;Trusted_Connection=True;"
-// }
-//
-// GetConnectionString("DefaultConnection")
-// reads the value of:
-//
-// ConnectionStrings:DefaultConnection
-//
-// UseSqlServer() tells Entity Framework Core:
-//
-// "Use SQL Server as the database provider."
-
-
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // ============================================================
-// EMPLOYEE SERVICE AND REPOSITORY
+// 3. DEPENDENCY INJECTION
 // ============================================================
 
-// Register Employee Service with Dependency Injection.
-//
-// IEmployeeService = abstraction/interface
-// EmployeeService  = actual implementation
-//
-// Whenever a class asks for:
-//
-// IEmployeeService
-//
-// ASP.NET Core DI container automatically provides:
-//
-// EmployeeService
-//
-// Example:
-//
-// public EmployeeController(IEmployeeService service)
-// {
-//     _service = service;
-// }
+// When IEmployeeService is requested, provide EmployeeService.
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
-
-// Register Employee Repository.
-//
-// Whenever a class asks for:
-//
-// IEmployeeRepository
-//
-// ASP.NET Core creates/provides:
-//
-// EmployeeRepository
-//
-// Repository is responsible mainly for database access,
-// while Service contains business logic.
+// When IEmployeeRepository is requested, provide EmployeeRepository.
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 
-
-// ------------------------------------------------------------
-// WHY USE INTERFACE + IMPLEMENTATION?
-// ------------------------------------------------------------
-//
-// Instead of:
-//
-// EmployeeService service = new EmployeeService();
-//
-// we use:
-//
-// IEmployeeService
-//
-// This provides:
-//
-// - Loose coupling
-// - Easier unit testing
-// - Dependency Injection
-// - Easier replacement of implementation
-// - Better maintainability
-//
-// Architecture:
-//
-// Controller
-//     ↓
-// IEmployeeService
-//     ↓
-// EmployeeService
-//     ↓
-// IEmployeeRepository
-//     ↓
-// EmployeeRepository
-//     ↓
-// AppDbContext
-//     ↓
-// SQL Server
-
-
-
-// ============================================================
-// AUTHENTICATION SERVICE
-// ============================================================
-
-// Register our custom authentication service.
-//
-// AuthService contains authentication-related business logic.
-//
-// Typically it handles:
-//
-// 1. User registration
-// 2. Find user by email/username
-// 3. Password verification
-// 4. JWT generation
-//
-// Example login flow:
-//
-// Client
-//   ↓
-// POST /api/auth/login
-//   ↓
-// AuthController
-//   ↓
-// IAuthService
-//   ↓
-// AuthService
-//   ↓
-// Check user from database
-//   ↓
-// Verify password
-//   ↓
-// Generate JWT
-//   ↓
-// Return JWT to client
+// Register authentication business logic.
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-
-// ============================================================
-// JWT SERVICE
-// ============================================================
-
-// Register JWT service.
-//
-// JwtService is responsible for creating JWT tokens.
-//
-// It normally receives:
-//
-// - User ID
-// - Username/email
-// - Roles/claims
-//
-// and creates a digitally signed JWT.
-//
-// Example:
-//
-// Login successful
-//       ↓
-// JwtService
-//       ↓
-// Create Claims
-//       ↓
-// Create Signing Credentials
-//       ↓
-// Create JWT
-//       ↓
-// Return token
-//
-// The client then sends this token with future requests.
+// Register JWT token generation.
 builder.Services.AddScoped<IJwtService, JwtService>();
 
+// Register ASP.NET Core's password hashing implementation.
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // ============================================================
-// PASSWORD HASHING
+// 4. JWT SECRET KEY CONFIGURATION
 // ============================================================
 
-// Register ASP.NET Core's PasswordHasher.
-//
-// IPasswordHasher<User>
-//        ↓
-// PasswordHasher<User>
-//
-// This service provides secure password hashing.
-//
-// During registration:
-//
-// Plain Password
-//      ↓
-// PasswordHasher
-//      ↓
-// Password Hash
-//      ↓
-// Store Hash in Database
-//
-// Example:
-//
-// User enters:
-// "MyPassword123"
-//
-// Database stores something similar to:
-//
-// AQAAAAIAAYagAAAAE...
-//
-// NOT:
-//
-// MyPassword123
-//
-// IMPORTANT:
-// We should NEVER store plain-text passwords in the database.
-builder.Services.AddScoped<
-    IPasswordHasher<User>,
-    PasswordHasher<User>>();
+// Read the signing key from configuration.
+// In production, provide it using a secure secret store or environment variable.
+var jwtKey = builder.Configuration["Jwt:Key"];
+var usingGeneratedDevKey = false;
 
+// A missing or short key is handled differently in development
+// and production.
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        // Generate a temporary random key for development.
+        jwtKey = Convert.ToBase64String(
+            RandomNumberGenerator.GetBytes(48));
 
-// ------------------------------------------------------------
-// PASSWORD LOGIN FLOW
-// ------------------------------------------------------------
-//
-// During login:
-//
-// User enters:
-//
-// Email: ashish@gmail.com
-// Password: MyPassword123
-//
-//        ↓
-//
-// AuthService gets user from DB
-//
-//        ↓
-//
-// PasswordHasher.VerifyHashedPassword()
-//
-//        ↓
-//
-// Password matches?
-//
-// YES → Generate JWT
-//
-// NO → Return Unauthorized
-//
-// PasswordHasher handles the hashing/verification process
-// without us manually implementing password hashing algorithms.
+        // Make the generated key available to JwtService
+        // and to the JWT validation configuration below.
+        builder.Configuration["Jwt:Key"] = jwtKey;
 
+        usingGeneratedDevKey = true;
+    }
+    else
+    {
+        // Do not start production with a missing or short key.
+        throw new InvalidOperationException(
+            "Jwt:Key is missing or shorter than 32 characters. " +
+            "Provide it through the environment variable Jwt__Key " +
+            "or your host's secret store.");
+    }
+}
 
+// Read the expected issuer and audience.
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
 
 // ============================================================
-// JWT AUTHENTICATION
+// 5. JWT AUTHENTICATION
 // ============================================================
 
-// Register JWT Bearer authentication.
-//
-// This tells ASP.NET Core:
-//
-// "Use JWT Bearer tokens to authenticate API requests."
-//
-// Client sends:
-//
-// Authorization: Bearer eyJhbGciOiJIUzI1Ni...
-//
-// ASP.NET Core extracts the token and validates it.
+// Configure JWT Bearer authentication.
+// ASP.NET Core will use this scheme to authenticate requests
+// containing a Bearer token.
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-
-    // Add JWT Bearer authentication handler.
-    //
-    // JwtBearerHandler is responsible for processing
-    // the Authorization header and validating the JWT.
     .AddJwtBearer(options =>
     {
-        // ----------------------------------------------------
-        // READ JWT CONFIGURATION
-        // ----------------------------------------------------
+        options.MapInboundClaims = true;
 
-        // Read the secret key from configuration.
-        //
-        // Example appsettings.json:
-        //
-        // "Jwt": {
-        //     "Key": "very-long-secret-key",
-        //     "Issuer": "EmployeeManagementAPI",
-        //     "Audience": "EmployeeManagementClient"
-        // }
-        var key = builder.Configuration["Jwt:Key"];
+        // Define how incoming JWT tokens must be validated.
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            // Verify the token signature using the configured key.
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtKey!)),
 
+            // Verify who issued the token.
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
 
-        // Read expected token issuer.
-        var issuer = builder.Configuration["Jwt:Issuer"];
+            // Verify that the token is intended for this API/client.
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
 
+            // Reject expired tokens.
+            ValidateLifetime = true,
 
-        // Read expected token audience.
-        var audience = builder.Configuration["Jwt:Audience"];
+            // Do not allow an additional clock-skew grace period.
+            ClockSkew = TimeSpan.Zero,
 
-
-        // ----------------------------------------------------
-        // JWT TOKEN VALIDATION RULES
-        // ----------------------------------------------------
-
-        // TokenValidationParameters tells ASP.NET Core
-        // exactly how the JWT should be validated.
-        options.TokenValidationParameters =
-            new TokenValidationParameters
-            {
-                // ------------------------------------------------
-                // 1. VALIDATE SIGNATURE
-                // ------------------------------------------------
-
-                // Ensures that the JWT was signed using
-                // the expected secret/signing key.
-                //
-                // This protects against someone modifying
-                // the token manually.
-                ValidateIssuerSigningKey = true,
-
-
-                // ------------------------------------------------
-                // SIGNING KEY
-                // ------------------------------------------------
-
-                // Convert our secret key string into bytes
-                // and create a symmetric security key.
-                //
-                // The same signing key must be used when
-                // generating and validating the JWT.
-                IssuerSigningKey =
-                    new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(key!)
-                    ),
-
-
-                // ------------------------------------------------
-                // 2. VALIDATE ISSUER
-                // ------------------------------------------------
-
-                // Issuer means:
-                //
-                // "Who created this token?"
-                //
-                // Example:
-                //
-                // iss = EmployeeManagementAPI
-                //
-                // ASP.NET Core checks whether the token's issuer
-                // matches the configured issuer.
-                ValidateIssuer = true,
-
-                ValidIssuer = issuer,
-
-
-                // ------------------------------------------------
-                // 3. VALIDATE AUDIENCE
-                // ------------------------------------------------
-
-                // Audience means:
-                //
-                // "Who is this token intended for?"
-                //
-                // Example:
-                //
-                // aud = EmployeeManagementClient
-                //
-                // The API checks whether the token was intended
-                // for this application/API.
-                ValidateAudience = true,
-
-                ValidAudience = audience,
-
-
-                // ------------------------------------------------
-                // 4. VALIDATE TOKEN EXPIRATION
-                // ------------------------------------------------
-
-                // Checks whether the JWT has expired.
-                //
-                // If the token is expired:
-                //
-                // Authentication fails.
-                ValidateLifetime = true,
-
-
-                // ------------------------------------------------
-                // CLOCK SKEW
-                // ------------------------------------------------
-
-                // ClockSkew provides tolerance between server
-                // clocks when validating token expiration.
-                //
-                // Normally ASP.NET Core has a default tolerance.
-                //
-                // Setting it to Zero means:
-                //
-                // "Do not allow additional expiration time."
-                //
-                // So if the token is expired, it is immediately
-                // considered invalid.
-                ClockSkew = TimeSpan.Zero
-            };
+            // Map claims to the identity's name and role.
+            NameClaimType = ClaimTypes.Name,
+            RoleClaimType = ClaimTypes.Role
+        };
     });
 
-
-// ============================================================
-// AUTHORIZATION
-// ============================================================
-
-// Register ASP.NET Core Authorization services.
-//
-// Authentication answers:
-//
-// "WHO ARE YOU?"
-//
-// Authorization answers:
-//
-// "ARE YOU ALLOWED TO DO THIS?"
-//
-// Example:
-//
-// [Authorize]
-// public IActionResult GetEmployees()
-//
-// The user must be authenticated before accessing
-// the endpoint.
-//
-// Later we can also implement:
-//
-// [Authorize(Roles = "Admin")]
-//
-// which means only users with the Admin role can access it.
+// Register authorization services.
+// Authorization determines what an authenticated user can access.
 builder.Services.AddAuthorization();
 
+// ============================================================
+// 6. RATE LIMITING
+// ============================================================
+
+// Read the maximum permitted authentication requests per minute.
+// Use 5 if the setting is missing.
+var authPermitLimit =
+    builder.Configuration.GetValue<int?>(
+        "RateLimit:AuthPermitPerMinute") ?? 5;
+
+builder.Services.AddRateLimiter(options =>
+{
+    // Return HTTP 429 when a request exceeds the limit.
+    options.RejectionStatusCode =
+        StatusCodes.Status429TooManyRequests;
+
+    // Define a fixed-window rate-limiting policy called "auth".
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            // Maintain a separate limit for each remote IP address.
+            httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                // Maximum requests allowed in the window.
+                PermitLimit = authPermitLimit,
+
+                // Reset the window every minute.
+                Window = TimeSpan.FromMinutes(1),
+
+                // Do not queue excess requests.
+                QueueLimit = 0
+            }));
+});
 
 // ============================================================
-// SWAGGER / OPENAPI
+// 7. SWAGGER CONFIGURATION
 // ============================================================
 
-// Register API Explorer.
-//
-// ASP.NET Core uses this to discover controller actions
-// and generate API metadata.
-//
-// Swagger uses this metadata to display endpoints.
+// Makes API endpoint information available to API Explorer.
 builder.Services.AddEndpointsApiExplorer();
 
-
-// Configure Swagger/OpenAPI.
+// Register Swagger/OpenAPI generation.
 builder.Services.AddSwaggerGen(options =>
 {
-    // ========================================================
-    // JWT BEARER SECURITY DEFINITION
-    // ========================================================
-
-    // Define JWT Bearer authentication for Swagger.
-    //
-    // This allows Swagger UI to understand that our API
-    // uses JWT authentication.
-    //
-    // It creates the "Authorize" button in Swagger UI.
+    // Tell Swagger how to send JWT Bearer tokens.
     options.AddSecurityDefinition(
         "Bearer",
         new OpenApiSecurityScheme
         {
-            // Name of the HTTP header.
-            //
-            // Client sends:
-            //
-            // Authorization: Bearer <token>
             Name = "Authorization",
-
-
-            // HTTP authentication scheme.
             Type = SecuritySchemeType.Http,
-
-
-            // Authentication scheme.
-            //
-            // IMPORTANT:
-            // "bearer" tells Swagger this is Bearer authentication.
             Scheme = "bearer",
-
-
-            // Tells Swagger that the Bearer token is a JWT.
             BearerFormat = "JWT",
-
-
-            // Token will be sent through HTTP header.
             In = ParameterLocation.Header,
-
-
-            // Description displayed in Swagger UI.
             Description =
                 "Enter your JWT token. Swagger will send it as: " +
                 "Authorization: Bearer <token>"
         });
 
-
-    // ========================================================
-    // JWT SECURITY REQUIREMENT
-    // ========================================================
-
-    // Define the JWT security requirement for API operations.
-    //
-    // This connects our "Bearer" security definition
-    // with Swagger API documentation.
-    //
-    // In simple words:
-    //
-    // "Swagger knows that this API supports JWT Bearer
-    // authentication."
+    // Add the Bearer security requirement to the OpenAPI document.
     options.AddSecurityRequirement(document =>
         new OpenApiSecurityRequirement
         {
-            [
-                new OpenApiSecuritySchemeReference(
-                    "Bearer",
-                    document)
-            ] = []
+            [new OpenApiSecuritySchemeReference("Bearer", document)] = []
         });
 });
 
-
 // ============================================================
-// BUILD APPLICATION
+// 8. BUILD THE APPLICATION
 // ============================================================
 
-// Build the application.
-//
-// At this point ASP.NET Core creates the WebApplication
-// using all the services and configuration registered above.
-//
-// Before this:
-//
-// builder.Services...
-//
-// We were CONFIGURING services.
-//
-// After this:
-//
-// var app = builder.Build();
-//
-// We have the actual application object that will
-// process HTTP requests.
 var app = builder.Build();
 
-
-// ============================================================
-// HTTP REQUEST PIPELINE
-// ============================================================
-//
-// From this point onward we configure the middleware pipeline.
-//
-// Every incoming HTTP request travels through this pipeline.
-//
-// Example:
-//
-// HTTP Request
-//      ↓
-// Global Exception Middleware
-//      ↓
-// Swagger
-//      ↓
-// HTTPS
-//      ↓
-// Authentication
-//      ↓
-// Authorization
-//      ↓
-// Controller
-//      ↓
-// Service
-//      ↓
-// Repository
-//      ↓
-// Database
-//
-// The order of middleware is important.
-
-
-
-// ============================================================
-// GLOBAL EXCEPTION HANDLING
-// ============================================================
-
-// Add our custom global exception middleware.
-//
-// This middleware catches unhandled exceptions
-// that occur during request processing.
-//
-// Example:
-//
-// Controller
-//     ↓
-// Service
-//     ↓
-// Database error
-//     ↓
-// Exception
-//     ↓
-// GlobalExceptionMiddleware
-//     ↓
-// Standard error response
-//
-// Without global exception handling, clients may receive
-// inconsistent error responses.
-//
-// A production API should avoid exposing internal
-// exception details such as:
-//
-// - Database connection information
-// - Stack traces
-// - Internal class names
-// - SQL details
-//
-// Instead, we can return something like:
-//
-// {
-//     "statusCode": 500,
-//     "message": "An unexpected error occurred."
-// }
-app.UseMiddleware<GlobalExceptionMiddleware>();
-
-
-// ============================================================
-// SWAGGER UI
-// ============================================================
-
-// Enable Swagger only when the application is running
-// in Development environment.
-//
-// Environment can be:
-//
-// Development
-// Staging
-// Production
-//
-// In Development:
-//
-// Swagger JSON endpoint is enabled.
-// Swagger UI is enabled.
-if (app.Environment.IsDevelopment())
+// Warn during development if a temporary signing key was generated.
+// Tokens signed with that temporary key will not remain valid
+// after the application restarts.
+if (usingGeneratedDevKey)
 {
-    // Generates OpenAPI JSON document.
-    app.UseSwagger();
-
-
-    // Provides interactive Swagger UI.
-    //
-    // We can test APIs directly from the browser.
-    app.UseSwaggerUI();
+    app.Logger.LogWarning(
+        "No Jwt:Key configured. Using a temporary random key for this run. " +
+        "Tokens will stop working when the app restarts.");
 }
 
+// ============================================================
+// 9. CONFIGURE THE HTTP REQUEST PIPELINE
+// ============================================================
 
-// ============================================================
-// HTTPS REDIRECTION
-// ============================================================
+// Handle exceptions that pass through the remaining pipeline.
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
+// Enable Swagger only in development.
+// In other environments, enable HTTP Strict Transport Security.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+else
+{
+    app.UseHsts();
+}
 
 // Redirect HTTP requests to HTTPS.
-//
-// Example:
-//
-// http://localhost:5079/api/employees
-//
-// gets redirected to:
-//
-// https://localhost:7226/api/employees
-//
-// HTTPS encrypts communication between client and server.
-//
-// This is especially important when sending:
-//
-// - Passwords
-// - JWT tokens
-// - Personal information
-// - Other sensitive data
 app.UseHttpsRedirection();
 
+// Apply rate-limiting middleware.
+app.UseRateLimiter();
 
-// ============================================================
-// AUTHENTICATION
-// ============================================================
-
-// Authentication determines WHO the user is.
-//
-// This middleware checks whether the request contains
-// a valid authentication token.
-//
-// For JWT authentication it looks for:
-//
-// Authorization: Bearer <JWT>
-//
-// Example request:
-//
-// GET /api/employees
-//
-// Authorization: Bearer eyJhbGciOiJIUzI1Ni...
-//
-// The JWT middleware then:
-//
-// 1. Extracts token
-// 2. Validates signature
-// 3. Validates issuer
-// 4. Validates audience
-// 5. Validates expiration
-// 6. Creates an authenticated user/ClaimsPrincipal
-//
-// If valid:
-//
-// HttpContext.User
-//
-// contains the authenticated user's claims.
+// Identify the caller from the supplied authentication credentials.
 app.UseAuthentication();
 
-
-// ============================================================
-// AUTHORIZATION
-// ============================================================
-
-// Authorization determines whether the authenticated
-// user is allowed to access the requested resource.
-//
-// Example:
-//
-// [Authorize]
-// [HttpGet]
-// public IActionResult GetEmployees()
-//
-// If the user is not authenticated:
-//
-// → 401 Unauthorized
-//
-// If the user is authenticated but does not have
-// required permissions/role:
-//
-// → 403 Forbidden
-//
-// Example:
-//
-// [Authorize(Roles = "Admin")]
-//
-// Only Admin users are allowed.
+// Check whether the authenticated caller is allowed to access
+// the requested endpoint.
 app.UseAuthorization();
 
-
-// ============================================================
-// MAP CONTROLLERS
-// ============================================================
-
-// Map controller routes to the ASP.NET Core request pipeline.
-//
-// Example:
-//
-// [ApiController]
-// [Route("api/[controller]")]
-// public class EmployeesController : ControllerBase
-//
-// [HttpGet]
-//
-// becomes:
-//
-// GET /api/employees
-//
-// MapControllers() tells ASP.NET Core:
-//
-// "Use attribute-routed controllers to handle requests."
+// Map controller actions to HTTP endpoints.
 app.MapControllers();
 
-
-// ============================================================
-// START APPLICATION
-// ============================================================
-
-// Start the ASP.NET Core application.
-//
-// Kestrel web server starts listening for HTTP/HTTPS requests.
-//
-// Example:
-//
-// https://localhost:7226
-//
-// Once app.Run() executes, the application starts
-// accepting incoming requests.
-//
-// app.Run() normally blocks until the application
-// is stopped.
+// Start the application and begin listening for requests.
 app.Run();

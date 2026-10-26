@@ -1,186 +1,106 @@
-﻿
-// ============================================================
-// NAMESPACE / IMPORT
-// ============================================================
-
-// System.ComponentModel.DataAnnotations contains
-// validation attributes such as:
-//
-// [Required]
-// [StringLength]
-// [EmailAddress]
-// [Range]
-//
-// These attributes allow us to define validation rules
-// directly on our DTO properties.
+﻿// Imports validation attributes such as [Required], [EmailAddress],
+// [Range], [Phone], and [StringLength].
 using System.ComponentModel.DataAnnotations;
-
-
-// ============================================================
-// NAMESPACE
-// ============================================================
 
 namespace EmployeeManagement.API.DTOs
 {
-    // ========================================================
-    // CREATE EMPLOYEE REQUEST DTO
-    // ========================================================
-
-    // DTO = Data Transfer Object.
-    //
-    // This class represents the data that the client is
-    // allowed/expected to send when creating an employee.
-    //
-    // It is NOT our database entity.
-    //
-    // Client
-    //    ↓
-    // CreateEmployeeRequest DTO
-    //    ↓
-    // EmployeeService
-    //    ↓
-    // Employee Entity
-    //    ↓
-    // EF Core
-    //    ↓
-    // SQL Server
-    //
+    /// <summary>
+    /// Defines the data required to create a new employee.
+    ///
+    /// This DTO receives data from the HTTP request body.
+    /// ASP.NET Core uses its validation attributes to check the
+    /// incoming data before the controller processes the request.
+    ///
+    /// It does not save data to the database.
+    /// EmployeeService and EmployeeRepository handle that work.
+    /// </summary>
     public class CreateEmployeeRequest
     {
-        // ====================================================
-        // EMPLOYEE NAME
-        // ====================================================
-
-        // [Required] means this property must have a value.
+        // Employee's full name.
         //
-        // If the client doesn't provide Name, validation fails.
+        // [Required] means the value must be provided.
+        // [StringLength] restricts the name to 2-100 characters.
         //
-        // Example:
-        //
-        // {
-        //     "name": ""
-        // }
-        //
-        // can result in a validation error.
+        // Example: "Rahul Patil"
         [Required]
-
-
-        // [StringLength(100)] means the string can contain
-        // a maximum of 100 characters.
-        //
-        // This protects the API from receiving unnecessarily
-        // large values for this field.
-        [StringLength(100)]
-
-
-        // Name contains the employee's name.
-        //
-        // = string.Empty
-        //
-        // initializes the property with an empty string
-        // instead of null.
-        //
-        // This helps satisfy nullable reference type
-        // requirements and avoids an uninitialized property.
+        [StringLength(100, MinimumLength = 2)]
         public string Name { get; set; } = string.Empty;
 
-
-        // ====================================================
-        // EMPLOYEE EMAIL
-        // ====================================================
-
-        // Email is required.
+        // Employee's email address.
         //
-        // The request should contain an email value.
+        // [Required] requires a value.
+        // [EmailAddress] checks whether the value has a valid
+        // email-like format.
+        // [StringLength(256)] sets the maximum length to 256 characters.
+        //
+        // Example: "rahul@example.com"
         [Required]
-
-
-        // [EmailAddress] validates that the supplied value
-        // follows an email-address format.
-        //
-        // Example of a valid-looking value:
-        //
-        // ashish@gmail.com
-        //
-        // Example of an invalid value:
-        //
-        // ashish
-        //
         [EmailAddress]
-
-
-        // Employee email address.
+        [StringLength(256)]
         public string Email { get; set; } = string.Empty;
 
-
-        // ====================================================
-        // DEPARTMENT
-        // ====================================================
-
-        // Department is required.
+        // Department in which the employee works.
         //
-        // The client must provide a department.
+        // [Required] requires a value.
+        // [StringLength(100)] limits the department name to 100 characters.
+        //
+        // Example: "IT", "HR", or "Finance"
         [Required]
-
-
-        // Maximum length is 100 characters.
         [StringLength(100)]
-
-
-        // Example values:
-        //
-        // IT
-        // HR
-        // Finance
-        // Administration
-        // Operations
-        //
         public string Department { get; set; } = string.Empty;
 
-
-        // ====================================================
-        // SALARY
-        // ====================================================
-
-        // [Range] defines the allowed numeric range.
+        // Employee's salary.
         //
-        // Minimum:
-        // 1
+        // [Range] restricts the numeric value to the configured range.
+        // The minimum is 0 and the maximum is 100,000,000.
         //
-        // Maximum:
-        // 100000000
+        // decimal is suitable for financial values because it represents
+        // decimal numbers more appropriately than floating-point types.
         //
-        // Therefore values outside this range will fail
-        // validation.
-        //
-        // Example:
-        //
-        // Salary = 0
-        //     ↓
-        // Invalid
-        //
-        // Salary = 50000
-        //     ↓
-        // Valid
-        //
-        // Salary = 100000001
-        //     ↓
-        // Invalid
-        [Range(1, 100000000)]
-
-
-        // decimal is used for salary because salary is a
-        // financial/monetary value.
-        //
-        // Decimal is generally preferred over float/double
-        // for monetary values because it provides decimal
-        // precision.
-        //
-        // Example:
-        //
-        // 75000.50
-        //
+        // Example: 65000.00
+        [Range(0, 100000000)]
         public decimal Salary { get; set; }
+
+        // Employee's phone number.
+        //
+        // The question mark (?) makes this property nullable.
+        // This means a phone number can be omitted or be null.
+        //
+        // [Phone] checks whether the value resembles a phone number.
+        // [StringLength(20)] limits its length to 20 characters.
+        //
+        // A string is used because phone numbers can contain
+        // leading zeros, country codes, spaces, or a plus sign.
+        //
+        // Example: "+91 9876543210"
+        [Phone]
+        [StringLength(20)]
+        public string? PhoneNumber { get; set; }
+
+        // Employee's joining date.
+        //
+        // DateTime? means the property can contain a date/time value
+        // or null.
+        //
+        // [Required] makes the joining date mandatory during request
+        // validation, even though the C# property is nullable.
+        //
+        // The nullable type allows validation to detect a missing value
+        // instead of silently using DateTime's default date.
+        //
+        // Example: "2026-10-26"
+        [Required]
+        public DateTime? JoiningDate { get; set; }
+
+        // Employee's job title.
+        //
+        // This property is optional because it has no [Required] attribute
+        // and its type is nullable.
+        //
+        // [StringLength(100)] limits the value to 100 characters.
+        //
+        // Example: "Software Developer"
+        [StringLength(100)]
+        public string? JobTitle { get; set; }
     }
 }
-

@@ -1,494 +1,122 @@
 ﻿
-// ============================================================
-// NAMESPACES / IMPORTS
-// ============================================================
-
-// Contains our custom application exceptions.
-//
-// Example:
-//
-// ConflictException
-//
-// We use custom exceptions to represent specific business
-// situations instead of returning errors directly from every
-// controller.
+// Imports the custom exception used when a business conflict occurs,
+// such as registering a username that already exists.
 using EmployeeManagement.API.Exceptions;
 
-
-// Provides ASP.NET Core MVC classes.
-//
-// We use ProblemDetails from this namespace.
-//
-// ProblemDetails provides a standard structure for returning
-// API errors to clients.
+// Provides ProblemDetails, a standard format for API error responses.
 using Microsoft.AspNetCore.Mvc;
 
-
 // Provides JSON serialization functionality.
-//
-// We use JsonSerializer to convert our ProblemDetails object
-// into JSON before sending it to the client.
 using System.Text.Json;
-
-
-// ============================================================
-// NAMESPACE
-// ============================================================
 
 namespace EmployeeManagement.API.Middleware
 {
-    // ========================================================
-    // GLOBAL EXCEPTION MIDDLEWARE
-    // ========================================================
-
-    // Middleware is a component that sits inside the
-    // ASP.NET Core HTTP request pipeline.
-    //
-    // Its main responsibility here is to catch exceptions
-    // that occur while processing an HTTP request.
-    //
-    // Instead of putting try-catch blocks inside every
-    // controller:
-    //
-    // Controller 1 → try/catch
-    // Controller 2 → try/catch
-    // Controller 3 → try/catch
-    //
-    // we handle exceptions centrally:
-    //
-    // Request
-    //    ↓
-    // GlobalExceptionMiddleware
-    //    ↓
-    // Controller
-    //    ↓
-    // Service
-    //    ↓
-    // Repository
-    //    ↓
-    // Exception
-    //    ↓
-    // GlobalExceptionMiddleware
-    //    ↓
-    // Standard error response
-    //
+    // GlobalExceptionMiddleware catches exceptions thrown while
+    // processing HTTP requests and converts them into HTTP error responses.
     public class GlobalExceptionMiddleware
     {
-        // ====================================================
-        // REQUEST DELEGATE
-        // ====================================================
-
-        // RequestDelegate represents the NEXT middleware
-        // component in the HTTP pipeline.
-        //
-        // In simple words:
-        //
-        // "_next tells this middleware where to send
-        // the request next."
-        //
-        // Example pipeline:
-        //
-        // GlobalExceptionMiddleware
-        //          ↓
-        //      Authentication
-        //          ↓
-        //      Authorization
-        //          ↓
-        //       Controller
-        //
-        // _next() is used to continue that pipeline.
+        // Holds the next middleware component in the HTTP request pipeline.
+        // It passes the request to the next component.
         private readonly RequestDelegate _next;
 
-
-        // ====================================================
-        // LOGGER
-        // ====================================================
-
-        // ILogger is ASP.NET Core's built-in logging
-        // abstraction.
-        //
-        // We use it to record exceptions and important
-        // application events.
-        //
-        // Logs can later be sent to:
-        //
-        // - Console
-        // - File
-        // - Application Insights
-        // - Serilog
-        // - ELK
-        // - Cloud logging platforms
-        //
+        // Used to record warning and error information in application logs.
         private readonly ILogger<GlobalExceptionMiddleware> _logger;
 
-
-        // ====================================================
-        // CONSTRUCTOR
-        // ====================================================
-
-        // ASP.NET Core Dependency Injection automatically
-        // provides:
-        //
-        // RequestDelegate
-        // ILogger<GlobalExceptionMiddleware>
-        //
-        // when the middleware is created.
-        //
-        // This is Dependency Injection.
+        // Constructor: ASP.NET Core injects the next middleware and logger.
         public GlobalExceptionMiddleware(
             RequestDelegate next,
             ILogger<GlobalExceptionMiddleware> logger)
         {
-            // Store the next middleware in the pipeline.
+            // Store the next middleware so this middleware can call it.
             _next = next;
 
-
-            // Store the logger so we can write logs later.
+            // Store the logger so exceptions can be recorded.
             _logger = logger;
         }
 
-
-        // ====================================================
-        // INVOKE ASYNC
-        // ====================================================
-
-        // ASP.NET Core middleware normally exposes an
-        // Invoke() or InvokeAsync() method.
-        //
-        // ASP.NET Core calls this method for every incoming
-        // HTTP request that passes through this middleware.
-        //
-        // HttpContext contains information about the current
-        // HTTP request and response.
-        //
-        // Examples:
-        //
-        // context.Request
-        // context.Response
-        // context.User
-        // context.Request.Path
-        //
+        // This method runs for each HTTP request that reaches this middleware.
         public async Task InvokeAsync(HttpContext context)
         {
-            // =================================================
-            // TRY BLOCK
-            // =================================================
-
-            // We place the next part of the request pipeline
-            // inside try-catch.
-            //
-            // This allows us to catch exceptions generated
-            // by controllers, services, repositories, etc.
             try
             {
-                // Continue processing the HTTP request.
-                //
-                // _next(context) sends the request to the next
-                // middleware component.
-                //
-                // Eventually the request reaches:
-                //
-                // Controller
-                //      ↓
-                // Service
-                //      ↓
-                // Repository
-                //      ↓
-                // Database
-                //
+                // Pass the request to the next middleware or endpoint.
+                // If an exception occurs downstream, execution moves to a catch block.
                 await _next(context);
             }
-
-
-            // =================================================
-            // HANDLE BUSINESS CONFLICT
-            // =================================================
-
-            // Catch our custom ConflictException.
-            //
-            // This exception represents a business conflict.
-            //
-            // Example:
-            //
-            // User tries to register:
-            //
-            // ashish@gmail.com
-            //
-            // But that email already exists.
-            //
-            // Service may throw:
-            //
-            // throw new ConflictException(
-            //     "Email already exists.");
-            //
-            // Instead of returning 500 Internal Server Error,
-            // we return:
-            //
-            // 409 Conflict
             catch (ConflictException ex)
             {
-                // Log the business conflict as a Warning.
-                //
-                // Warning is appropriate because this may be
-                // an expected business condition rather than
-                // an application crash.
-                //
-                // "ex" is included so the exception details
-                // are available in the logs.
+                // A known business conflict occurred.
+                // Log it as a warning because it is an expected application-level issue.
                 _logger.LogWarning(
                     ex,
                     "A business conflict occurred while processing the request.");
 
-
-                // Convert the ConflictException into a proper
-                // HTTP 409 response.
-                await HandleConflictExceptionAsync(
+                // Return HTTP 409 Conflict with a standard error response.
+                // The exception message is safe to expose for this known exception
+                // only if the application controls the message content.
+                await WriteProblemAsync(
                     context,
-                    ex);
+                    StatusCodes.Status409Conflict,
+                    "Conflict",
+                    ex.Message);
             }
-
-
-            // =================================================
-            // HANDLE ALL OTHER EXCEPTIONS
-            // =================================================
-
-            // This catches any unexpected exception that was
-            // not specifically handled above.
-            //
-            // Examples:
-            //
-            // - Database failure
-            // - NullReferenceException
-            // - Invalid operation
-            // - Unexpected application error
-            // - External service failure
-            //
-            // These are treated as:
-            //
-            // 500 Internal Server Error
             catch (Exception ex)
             {
-                // Log the unexpected exception as an Error.
-                //
-                // This is important for debugging production
-                // problems.
+                // Handle unexpected exceptions that were not caught elsewhere.
+                // Log the exception, including its details, for developers to investigate.
                 _logger.LogError(
                     ex,
                     "An unexpected error occurred while processing the request.");
 
-
-                // Return a safe generic error response.
-                //
-                // We intentionally don't return ex.Message
-                // to the client.
-                //
-                // Exception messages can contain sensitive
-                // implementation details.
-                await HandleExceptionAsync(context);
+                // Return HTTP 500 Internal Server Error.
+                // Do not expose internal exception details to the client because
+                // they may contain database details, file paths, or other sensitive data.
+                await WriteProblemAsync(
+                    context,
+                    StatusCodes.Status500InternalServerError,
+                    "Internal Server Error",
+                    "An unexpected error occurred.");
             }
         }
 
-
-        // ====================================================
-        // HANDLE CONFLICT EXCEPTION
-        // ====================================================
-
-        // This method creates the HTTP response for
-        // ConflictException.
-        //
-        // HTTP status:
-        //
-        // 409 Conflict
-        //
-        // is appropriate when the request conflicts with the
-        // current state of the resource.
-        //
-        // Example:
-        //
-        // POST /api/auth/register
-        //
-        // Email already exists.
-        //
-        // Response:
-        //
-        // 409 Conflict
-        private static async Task HandleConflictExceptionAsync(
+        // Creates and sends a standardized ProblemDetails JSON response.
+        // This method is static because it does not use instance fields.
+        private static async Task WriteProblemAsync(
             HttpContext context,
-            ConflictException ex)
+            int statusCode,
+            string title,
+            string detail)
         {
-            // ------------------------------------------------
-            // HTTP STATUS CODE
-            // ------------------------------------------------
+            // If the response has already started, its status and headers
+            // may already have been sent to the client and cannot be replaced.
+            if (context.Response.HasStarted)
+            {
+                return;
+            }
 
-            // Set response status code to 409.
-            //
-            // 409 means:
-            //
-            // "The request could not be completed because
-            // it conflicts with the current state of the
-            // resource."
-            context.Response.StatusCode =
-                StatusCodes.Status409Conflict;
+            // Clear any response headers and body content that have not yet
+            // been sent, so we can create a clean error response.
+            context.Response.Clear();
 
+            // Set the HTTP status code, such as 409 or 500.
+            context.Response.StatusCode = statusCode;
 
-            // ------------------------------------------------
-            // CONTENT TYPE
-            // ------------------------------------------------
+            // Tell the client that the response body follows the Problem Details
+            // JSON media type.
+            context.Response.ContentType = "application/problem+json";
 
-            // Tell the client that the response contains
-            // Problem Details JSON.
-            //
-            // application/problem+json is a standard media
-            // type for API error responses.
-            context.Response.ContentType =
-                "application/problem+json";
-
-
-            // ------------------------------------------------
-            // CREATE PROBLEM DETAILS
-            // ------------------------------------------------
-
-            // ProblemDetails provides a standard structure
-            // for HTTP API errors.
-            //
-            // The response will contain information such as:
-            //
-            // status
-            // title
-            // detail
-            //
+            // Create a standard object containing information about the error.
             var problemDetails = new ProblemDetails
             {
-                // HTTP status code.
-                Status = StatusCodes.Status409Conflict,
-
-
-                // Short description of the error.
-                Title = "Conflict",
-
-
-                // Detailed business error message.
-                //
-                // Example:
-                //
-                // "Email already exists."
-                //
-                // This comes from our custom exception.
-                Detail = ex.Message
+                Status = statusCode, // Numeric HTTP status code.
+                Title = title,       // Short description of the error.
+                Detail = detail      // Explanation safe to show to the client.
             };
 
-
-            // ------------------------------------------------
-            // CONVERT OBJECT TO JSON
-            // ------------------------------------------------
-
-            // ProblemDetails is a C# object.
-            //
-            // The client expects JSON.
-            //
-            // Therefore we serialize:
-            //
-            // C# Object
-            //     ↓
-            // JsonSerializer
-            //     ↓
-            // JSON
-            //
-            var json = JsonSerializer.Serialize(problemDetails);
-
-
-            // ------------------------------------------------
-            // WRITE RESPONSE
-            // ------------------------------------------------
-
-            // Send the JSON response back to the client.
-            await context.Response.WriteAsync(json);
-        }
-
-
-        // ====================================================
-        // HANDLE GENERAL EXCEPTION
-        // ====================================================
-
-        // Handles unexpected exceptions.
-        //
-        // Example:
-        //
-        // Database connection fails
-        //        ↓
-        // Exception
-        //        ↓
-        // This method
-        //        ↓
-        // 500 Internal Server Error
-        private static async Task HandleExceptionAsync(
-            HttpContext context)
-        {
-            // ------------------------------------------------
-            // HTTP STATUS CODE
-            // ------------------------------------------------
-
-            // 500 means:
-            //
-            // "Something unexpected went wrong on the server."
-            //
-            context.Response.StatusCode =
-                StatusCodes.Status500InternalServerError;
-
-
-            // ------------------------------------------------
-            // CONTENT TYPE
-            // ------------------------------------------------
-
-            // Tell the client that the response is
-            // Problem Details JSON.
-            context.Response.ContentType =
-                "application/problem+json";
-
-
-            // ------------------------------------------------
-            // CREATE ERROR RESPONSE
-            // ------------------------------------------------
-
-            var problemDetails = new ProblemDetails
-            {
-                // HTTP status:
-                //
-                // 500 Internal Server Error
-                Status = StatusCodes.Status500InternalServerError,
-
-
-                // Short error title.
-                Title = "Internal Server Error",
-
-
-                // Safe message for the client.
-                //
-                // We do NOT expose:
-                //
-                // ex.Message
-                //
-                // because internal exception details may expose
-                // sensitive information.
-                Detail = "An unexpected error occurred."
-            };
-
-
-            // ------------------------------------------------
-            // CONVERT TO JSON
-            // ------------------------------------------------
-
-            // Convert ProblemDetails object to JSON.
-            var json = JsonSerializer.Serialize(problemDetails);
-
-
-            // ------------------------------------------------
-            // SEND RESPONSE
-            // ------------------------------------------------
-
-            // Write the JSON response to the HTTP response.
-            await context.Response.WriteAsync(json);
+            // Convert the ProblemDetails object into JSON and write it
+            // to the HTTP response body.
+            await context.Response.WriteAsync(
+                JsonSerializer.Serialize(problemDetails));
         }
     }
 }
-
