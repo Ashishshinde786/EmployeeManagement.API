@@ -1,3 +1,4 @@
+
 using EmployeeManagement.API.Data;
 using EmployeeManagement.API.Middleware;
 using EmployeeManagement.API.Models;
@@ -38,11 +39,25 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // 3. DEPENDENCY INJECTION
 // ============================================================
 
-// When IEmployeeService is requested, provide EmployeeService.
+// ---------------- EMPLOYEE MODULE --------------------------
+
+// Register Employee Service.
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
-// When IEmployeeRepository is requested, provide EmployeeRepository.
+// Register Employee Repository.
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+
+
+// ---------------- DEPARTMENT MODULE ------------------------
+
+// Register Department Service.
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+
+// Register Department Repository.
+builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+
+
+// ---------------- AUTHENTICATION MODULE --------------------
 
 // Register authentication business logic.
 builder.Services.AddScoped<IAuthService, AuthService>();
